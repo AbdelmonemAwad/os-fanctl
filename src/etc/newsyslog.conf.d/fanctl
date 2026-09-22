@@ -1,0 +1,23 @@
+# Copyright (C) 2026 Abdelmonem Awad <eg2@live.com>. BSD 2-Clause License.
+#
+# Rotation for the log the fan controller writes. See newsyslog.conf(5).
+#
+# It is an ordinary file as well as syslog, and both on purpose: syslog is where an
+# administrator's own tooling will find "the fans were handed back at 03:14 because the chipset
+# sensor stopped answering", and the file is what the page tails and what a bug report is cut from.
+# The controller is nearly silent - one line when it takes control, one when it gives it back, and
+# one for every reason it ever refused - so a size limit rather than a schedule is right: a
+# firewall that never has a problem never rotates this file at all, and one that is hunting will
+# fill it in an afternoon.
+#
+# The signal goes to the daemon(8) supervisor named in the pidfile, not to the controller: daemon
+# is what holds the log open, and it was started with -H so that SIGHUP means "close this file and
+# open it again" and nothing else. The controller is not disturbed - which matters more here than
+# it would elsewhere, because a signal it did not expect is a signal that ends with it handing the
+# fans back and stopping, and log rotation is not a reason to do that.
+#
+# 600 is daemon(8)'s own mode for a file it creates, so the entry and the file agree on the first
+# rotation as well as on the fiftieth.
+#
+# logfilename                    [owner:group]  mode  count  size  when  flags  [/pid_file]                         [sig_num]
+/var/log/fanctl/fanctl.log       root:wheel     600   4      200   *     CJ     /var/run/fanctl/fanctl.supervisor.pid  1

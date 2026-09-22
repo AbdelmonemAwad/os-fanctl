@@ -1,0 +1,118 @@
+<form>
+    <field>
+        <type>header</type>
+        <label>Control</label>
+    </field>
+    <field>
+        <id>fanctl.general.enabled</id>
+        <label>Enabled</label>
+        <type>checkbox</type>
+        <help>Nothing runs until this is on. Turning it off stops the service, and stopping the service hands every fan back to the hardware before it goes - so switching this off is always safe, and is the right thing to do if anything here is behaving in a way you do not understand.</help>
+    </field>
+    <field>
+        <id>fanctl.general.mode</id>
+        <label>Mode</label>
+        <type>dropdown</type>
+        <help>Watch only never writes to the chip at all: the fans stay under whatever law the firmware left them under, and this page fills with real readings. It is what a fresh installation runs, and on hardware nobody has measured it is all this plugin will do. The other two write a duty, and neither of them writes anything until the whole safety contract on the Fans tab is satisfied.</help>
+    </field>
+    <field>
+        <id>fanctl.general.channels</id>
+        <label>Fans to control</label>
+        <type>select_multiple</type>
+        <style>tokenize</style>
+        <!-- A name can be typed that the probe did not offer. The probe only offers channels
+             that report a turning fan, which is the right thing to suggest and the wrong thing
+             to enforce: somebody who has just fitted a fan to a header knows something the
+             last probe did not. -->
+        <allownew>true</allownew>
+        <help>Which channels the plugin may drive, named as the chip names them. Empty means none, which is the default: a list that filled itself in from the probe would drive a header with nothing on it. The Hardware tab lists what this chip reports and which of those show a fan that is actually turning - a channel reading zero may have no fan on it, or a fan with no tachometer wire, and nothing in software can tell those apart, so those are never offered as fans to control.</help>
+    </field>
+    <field>
+        <id>fanctl.general.sensors</id>
+        <label>Temperatures to follow</label>
+        <type>select_multiple</type>
+        <style>tokenize</style>
+        <help>The hottest reading among the groups chosen is what the curve is fed - never an average of them, because one core at 85 C and three at 40 C averages to a number a curve is happy with while the machine still has a core at 85 C. A group chosen here that this machine does not report is not ignored: the fans go back to the hardware, because a decision made from a sensor that is not answering is a guess.</help>
+    </field>
+    <field>
+        <id>fanctl.general.interval</id>
+        <label>Decide every (seconds)</label>
+        <type>text</type>
+        <help>How often the temperatures are read and a duty decided. Ten seconds is unhurried on purpose: a tachometer on this class of chip is itself averaged over a window, so a faster loop reads the same number twice, and every write is a moment of exposure to the kernel driver that reads the same chip without taking a lock.</help>
+    </field>
+
+    <field>
+        <type>header</type>
+        <label>The floor</label>
+    </field>
+    <field>
+        <id>fanctl.general.floor_duty</id>
+        <label>Never below (%)</label>
+        <type>text</type>
+        <help>Your own limit, on top of the measured one. The duty this plugin will actually never go below is the higher of this and the floor measured on your hardware with the floor test on the Hardware tab - and where nothing has been measured, no fan is driven at all, whatever is typed here. This can only raise the floor. It cannot lower it, and it is not a substitute for measuring one: a number typed into a web page is not a measurement, and a fan is the one thing in this firewall that stops for good.</help>
+    </field>
+    <field>
+        <id>fanctl.general.manual_duty</id>
+        <label>Fixed duty (%)</label>
+        <type>text</type>
+        <help>What the fixed-duty mode holds. It is held up to the floor if it is below it, never down to it - and the page refuses to save a value below the floor rather than quietly raising it later, because a setting that is accepted and then ignored is worse than one that is refused with a reason.</help>
+    </field>
+
+    <field>
+        <type>header</type>
+        <label>The curve</label>
+    </field>
+    <field>
+        <id>fanctl.general.points</id>
+        <label>Points</label>
+        <type>text</type>
+        <hint>40:60,50:75,60:90,70:100</hint>
+        <help>Degrees:percent pairs, rising in temperature. Between the points the duty is interpolated; below the first point it is the first point's duty, above the last it is the last one's. The shape is drawn under this box from the same code that drives the fan, so what you see is what the daemon would do rather than a second opinion about it.</help>
+    </field>
+    <field>
+        <id>fanctl.general.limit_c</id>
+        <label>Limit (C)</label>
+        <type>text</type>
+        <help>At or above this the curve is not consulted at all: the duty is 100 and it is applied at once, whatever the hysteresis and the dwell below would otherwise have said.</help>
+    </field>
+    <field>
+        <id>fanctl.general.panic_c</id>
+        <label>Panic point (C)</label>
+        <type>text</type>
+        <help>And above this the plugin stops being in the way: it hands every fan back to the hardware and the daemon exits, leaving a line in the log saying why. A machine still climbing at full duty has demonstrated that this plugin is not what is keeping it cool, and the most useful thing it can then do is return the chip to a control law written by whoever built the board.</help>
+    </field>
+
+    <field>
+        <type>header</type>
+        <label>Steadiness</label>
+    </field>
+    <field>
+        <id>fanctl.general.hysteresis_c</id>
+        <label>Hysteresis (C)</label>
+        <type>text</type>
+        <help>How far the temperature has to fall below the one that justified the current duty before the fan is allowed to slow down. This and the dwell below apply only on the way down - going up is immediate, because a delay on the way up is a delay spent hot. Together they are what stops a fan hunting up and down every few seconds, which is the audible fault everybody who has ever written a fan curve has shipped once.</help>
+    </field>
+    <field>
+        <id>fanctl.general.dwell_seconds</id>
+        <label>Dwell (seconds)</label>
+        <type>text</type>
+        <help>And how long a duty is held before it may be reduced at all, counted from the moment it was applied. A load that comes and goes every twenty seconds with a thirty-second dwell produces one fan speed rather than three.</help>
+    </field>
+    <field>
+        <id>fanctl.general.step</id>
+        <label>Round up to (%)</label>
+        <type>text</type>
+        <help>The duty is rounded up to a multiple of this, so that a temperature wobbling by a degree does not become a write to the chip every cycle for ever. Up rather than to the nearest, deliberately: the fan is allowed to be louder than the curve asked for and is never allowed to be quieter. Fewer writes is also the only mitigation this plugin has against the kernel driver that reads the same chip without taking a lock, so a larger step is quieter in both senses.</help>
+    </field>
+
+    <field>
+        <type>header</type>
+        <label>Hardware nobody has measured</label>
+    </field>
+    <field>
+        <id>fanctl.general.accept_unmeasured</id>
+        <label>I accept an unconfirmed table entry</label>
+        <type>checkbox</type>
+        <help>The shipped table refuses to permit control on any appliance nobody has stood in front of, which today is every appliance but one. This is how you say that the machine is yours, that you have read what the Hardware tab says about it, and that you are watching it. It does two things and no more. It satisfies the permission line of the safety contract - the other five still have to hold: the original settings must have been captured, every fan you drive must report a tachometer that is turning, every temperature the decision needs must be being read at that moment, and every fan you drive must have a floor measured on this machine unless the mode is a fixed 100%, which is the one duty that needs no measurement because it cannot stop a fan that is turning. And it allows the floor test to run on hardware the table does not describe, which it otherwise refuses - without that there would be no way for an unlisted appliance ever to gain a measurement, and the table could never grow. It does not lower a floor and it does not skip a measurement.</help>
+    </field>
+</form>

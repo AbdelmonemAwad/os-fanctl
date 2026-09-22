@@ -1,0 +1,52 @@
+Fan Control is for the firewall that runs its fans at full speed for ever
+because the fan curve lived in the vendor's firmware and the vendor's
+firmware is gone. It reads the temperatures the kernel already publishes,
+decides a duty per fan, and above all hands every fan back to the hardware
+the moment anything is unclear.
+
+Nothing runs after installation, and nothing writes to a fan on the
+strength of having been installed. A fresh installation watches: the page
+fills with real readings - every fan, its speed, every temperature this
+machine reports and the sysctl each one came from - and the chip is never
+touched. That half works on any appliance, including one nobody has ever
+opened.
+
+Going further is deliberate, and it is gated by a contract of six
+conditions that is re-checked before every single decision. The chip has
+to be the chip the shipped hardware table describes. The table has to
+permit control on that model, or the owner has to have accepted an
+unmeasured entry in writing. The settings each fan was found under have to
+have been captured, so they can be written back exactly. Every fan to be
+driven has to have a floor - the lowest duty at which it keeps turning -
+that was measured on that machine with the floor test, never typed into a
+page and never taken from a datasheet. Every fan to be driven has to
+report a tachometer that is turning. And every temperature the decision
+needs has to be readable at that moment. If any one of them stops holding
+while the controller is running, the fans go back to the hardware on that
+cycle.
+
+The curve is hysteretic, so a fan does not hunt: it speeds up at once and
+slows down only after the temperature has fallen a whole hysteresis and a
+dwell has passed. Above a limit temperature the curve is not consulted and
+the duty is 100. Above a panic temperature the plugin stops being in the
+way: it hands the fans back and exits, because a machine still climbing at
+full duty has proved that this plugin is not what is keeping it cool.
+
+Every exit hands the fans back - a clean stop, a signal, an exception, a
+watchdog that fires because the loop stopped going round, the shutdown
+sequence, and the removal of the package itself. A restore writes back what
+was captured, never a duty someone thought looked safe. Where a restore
+cannot be made, the page says so in as many words and says that only a
+power cycle will fix it.
+
+The hardware table matches on SMBIOS, carries a verify block describing the
+chip that must be underneath, and says plainly how far each entry has
+actually been proven. Adding an appliance is one block and a pull request,
+and what is wanted in it is a measurement rather than a datasheet.
+
+Plugin Changelog
+================
+
+1.0
+
+* Initial release

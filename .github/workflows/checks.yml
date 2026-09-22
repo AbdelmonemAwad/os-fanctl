@@ -1,0 +1,154 @@
+name: checks
+
+# What a change to this plugin has to survive before it can be merged.
+#
+# Everything here is cheap and deterministic: it parses files and compares them with each
+# other. There is no OPNsense to install on a GitHub runner, no Super I/O to read and no fan
+# to watch, so this does not pretend to test behaviour. It catches the mistakes that have
+# actually been made while this plugin was being written:
+#
+#   * a template that no longer compiles, which takes the whole page to the crash reporter
+#     and tells the reader nothing about which line did it;
+#   * an apostrophe inside lang._(), which is the specific way that happens;
+#   * a Python file with a syntax error, or a name used and never defined, found after it
+#     was installed on a firewall;
+#   * a comment inside a widget's <translations>, which empties every dashboard in the GUI;
+#   * a malformed hardware table, which would make the plugin refuse to drive anything an
+#     hour later for a reason nobody could see;
+#   * an address or a device name from the machine this was written on, left in an example.
+#
+# WHAT IS NOT CHECKED HERE, and it is the most important file in the plugin: src/fanctl-io,
+# the C program that is the only thing that touches an I/O port. It is written against
+# FreeBSD headers - <machine/cpufunc.h>, /dev/io - and cannot be compiled on a Linux runner
+# at all. It is built on the firewall by the firewall's own compiler, with every warning
+# fatal, by install/install.sh. A green tick here says nothing about it.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  syntax:
+    name: syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python
+        run: |
+          shopt -s globstar nullglob
+          files=(src/**/*.py tools/**/*.py)
+          [ ${#files[@]} -gt 0 ] || { echo "no Python here"; exit 0; }
+          python3 -m compileall -q "${files[@]}"
+          # compileall is the parser; this is the part it does not do - a name used and
+          # never defined, an import that is not there. Both have shipped before.
+          python3 -m pip install --quiet pyflakes
+          python3 -m pyflakes "${files[@]}"
+
+      - name: PHP
+        run: |
+          shopt -s globstar nullglob
+          files=(src/**/*.php)
+          [ ${#files[@]} -gt 0 ] || { echo "no PHP here"; exit 0; }
+          for f in "${files[@]}"; do php -l "$f"; done
+
+      - name: XML
+        run: |
+          shopt -s globstar nullglob
+          files=(src/**/*.xml)
+          [ ${#files[@]} -gt 0 ] || { echo "no XML here"; exit 0; }
+          for f in "${files[@]}"; do
+            python3 -c 'import sys, xml.etree.ElementTree as ET; ET.parse(sys.argv[1])' "$f"
+            echo "ok $f"
+          done
+
+      # Well-formed is not enough for one of those files. A comment inside a widget's
+      # <translations> element reaches gettext() as a value; two of them reach it as an
+      # array, and the TypeError that follows empties every dashboard in the GUI - not just
+      # this widget, all of them - with nothing in any log naming the file.
+      - name: Widget metadata
+        run: python3 tools/check-widget-metadata.py .
+
+      # The page is not JavaScript until the template engine has been over it, so nothing
+      # else here reads the largest file in the plugin. This compiles it the way the GUI
+      # will and hands the result to a real parser.
+      - name: The page
+        run: python3 tools/check-page.py
+
+      - name: JSON
+        run: |
+          shopt -s globstar nullglob
+          files=(src/**/*.json)
+          [ ${#files[@]} -gt 0 ] || { echo "no JSON here"; exit 0; }
+          for f in "${files[@]}"; do
+            python3 -c 'import json, sys; json.load(open(sys.argv[1], encoding="utf-8"))' "$f"
+            echo "ok $f"
+          done
+
+      - name: Shell
+        run: |
+          shopt -s globstar nullglob
+          # install/ is run by the person installing, src/etc/rc.d is run by the system at
+          # boot, and pkg/ is run by pkg(8) as root in the middle of an install or a
+          # removal. Every one of them is a place where a syntax error is found too late -
+          # and the rc script is the one that, broken, leaves a controller that cannot be
+          # stopped, which is a fan that cannot be handed back.
+          for f in install/*.sh tools/*.sh pkg/*.sh src/etc/rc.d/*; do
+            [ -f "$f" ] || continue
+            head -n1 "$f" | grep -q '^#!' || continue
+            sh -n "$f" && echo "ok $f"
+          done
+
+  privacy:
+    name: nothing private
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: No real addresses, hardware identifiers or credentials
+        run: python3 tools/check-private-data.py .
+
+      # Arabic belongs in the catalogue and nowhere else: a sentence written straight into a
+      # template cannot be reviewed by somebody who does not read it, cannot be changed
+      # without touching code, and is invisible to anything that counts what still needs
+      # translating.
+      - name: No Arabic outside the translation files
+        run: python3 tools/check-code-language.py .
+
+  translations:
+    name: translations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # This plugin has no catalogue yet - every string on its page is English. These steps
+      # are here rather than added later because the day the catalogue arrives is the day
+      # somebody will forget to check it, and a step that says "not this plugin" until then
+      # costs four seconds and no attention.
+      - name: The generated data-string map is current
+        run: |
+          [ -f tools/gen-data-strings.py ] || { echo "not this plugin"; exit 0; }
+          python3 tools/gen-data-strings.py --check
+
+      - name: Every string the page asks for is in the catalogue
+        run: |
+          [ -f tools/check-strings.py ] || { echo "not this plugin yet"; exit 0; }
+          python3 tools/check-strings.py
+          python3 - <<'PY'
+          import glob, json, sys
+          name = sorted(glob.glob('src/opnsense/scripts/*/i18n/ui/source.json'))
+          if not name:
+              print('no catalogue here')
+              sys.exit(0)
+          src = json.load(open(name[0], encoding='utf-8'))
+          ar = json.load(open(name[0].replace('source.json', 'ar_SA.json'), encoding='utf-8'))
+          missing = [k for k in src if k not in ar]
+          for key in missing:
+              print('no Arabic for: %s' % key[:90])
+          print('%d msgids, %d translated' % (len(src), len(ar)))
+          sys.exit(1 if missing else 0)
+          PY

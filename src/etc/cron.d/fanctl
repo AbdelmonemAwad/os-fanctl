@@ -1,0 +1,22 @@
+# The fan and temperature history. See src/opnsense/scripts/fanctl/history.py.
+#
+# This line wakes the sampler every minute. It is NOT the sampling interval and it is not a
+# second controller: the interval lives in history.py, the script records a sample only when one
+# is due, and on a firewall where the fan-control daemon is running this invocation does nothing
+# at all - the daemon has already taken the reading it needs for its own decision and handed the
+# same one to the history, so that two processes are never walking the hardware-monitor window at
+# once. The script decides that for itself by looking at how old the daemon's status document is.
+#
+# It is therefore a cron line for the case fan control is OFF, which is the case this plugin
+# installs in and the case it stays in on any appliance nobody has measured a floor on. A machine
+# in monitor mode, or with the service stopped, still fills its history - which is the whole point
+# of keeping the record in a file rather than in the daemon.
+#
+# Cost on the reference appliance, measured 2026-09-22 (V): 54 ms for the first invocation of a
+# boot and about 40 ms after that, of which 46 ms is starting Python and 3.4 ms is the work. That
+# is 0.07% of one minute, on one of four cores.
+#
+# Output to /dev/null: the script prints a JSON line saying what it did, which is for somebody
+# running it by hand. A cron job that mailed root a line every minute would be a cron job somebody
+# deletes in a fortnight.
+*	*	*	*	*	root	/usr/local/opnsense/scripts/fanctl/history.py sample > /dev/null 2>&1

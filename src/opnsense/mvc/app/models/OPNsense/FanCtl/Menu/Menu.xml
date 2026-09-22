@@ -1,0 +1,12 @@
+<menu>
+    <!--
+        Under System, and not under Services or Interfaces, because the subject of this page is
+        the appliance itself: the fans bolted into it and the chip that turns them. It sits
+        directly under System as a leaf of its own, the way Snapshots does in the core menu, so
+        no order is given - the children of System are otherwise unordered and sort by name, and
+        a number invented here would only push Fan Control somewhere no one expects it.
+    -->
+    <System>
+        <FanCtl VisibleName="Fan Control" cssClass="fa fa-snowflake-o fa-fw" url="/ui/fanctl"/>
+    </System>
+</menu>

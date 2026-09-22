@@ -1,0 +1,222 @@
+<model>
+    <mount>//OPNsense/FanCtl</mount>
+    <version>1.0.0</version>
+    <description>Fan control</description>
+    <items>
+        <!--
+            Everything lives in this one container, and the names are not free.
+            Nothing here is read through the model at run time: the controller is Python,
+            started by an rc.d service, and fanctl.py reads ./OPNsense/FanCtl/general out of
+            /conf/config.xml and looks up every one of these by name. Rename one, or move it
+            into a container of its own, and the settings page saves a value that nothing
+            ever reads - which for most plugins means a setting that does nothing, and for
+            this one means a floor that is not applied.
+
+            Every bound below is also enforced in settings() in fanctl.py, because the daemon
+            reads config.xml with no model in front of it: a file restored from a backup or
+            edited by hand arrives there unchecked. Where the two ever disagree the narrower
+            wins, and the narrower is the Python one, because that is the copy with a fan
+            behind it.
+        -->
+        <general>
+            <enabled type="BooleanField">
+                <Required>Y</Required>
+                <!--
+                    Off. A plugin that starts writing to fan registers on the strength of
+                    having been installed is a plugin that can stop the only fan in somebody
+                    else's chassis, on a machine whose headers it has never seen. No amount of
+                    probing beforehand makes that decision safe to take on somebody's behalf.
+                -->
+                <Default>0</Default>
+            </enabled>
+            <!--
+                What the daemon is allowed to do. Three values and only three, because the
+                interesting line is between the first and the other two: monitor writes
+                nothing at all, ever, and is what makes this plugin installable on an
+                appliance nobody has measured - the page fills with real readings and the chip
+                is never touched.
+            -->
+            <mode type="OptionField">
+                <Required>Y</Required>
+                <Default>monitor</Default>
+                <OptionValues>
+                    <monitor>Watch only - never write to the chip</monitor>
+                    <curve>Follow the temperature curve</curve>
+                    <manual>Hold one fixed duty</manual>
+                </OptionValues>
+            </mode>
+            <!--
+                Which channels the daemon may drive, by the name the chip gives them. Empty
+                is the default and empty means none: a list that defaulted to "everything the
+                probe found" would drive a header with nothing on it the first time somebody
+                switched the mode over, and on this chip four of the five channels report no
+                fan at all.
+
+                A plain list rather than a set of checkboxes, because the names come from the
+                hardware and differ between chips. The page offers what the probe actually
+                found; the mask here only holds each entry to the shape of a channel name.
+            -->
+            <channels type="CSVListField">
+                <MaskPerItem>Y</MaskPerItem>
+                <Mask>/^[A-Z][A-Z0-9_]{1,15}$/</Mask>
+                <ValidationMessage>Use channel names as the chip reports them, such as SYSFAN.</ValidationMessage>
+            </channels>
+            <!--
+                Which temperatures a decision is made from. The hottest reading among the
+                groups chosen is what the curve is fed - never an average, because one core at
+                85 C and three at 40 C averages to a number a curve is happy with while the
+                machine still has a core at 85 C.
+
+                A group that is chosen and not present on the machine is not ignored: it fails
+                the sensors line of the safety contract and the fans go back to the hardware,
+                because a decision made from a sensor that is not answering is a guess.
+
+                The mask is the whole of GROUPS in sensors.py and has to stay that way. The
+                discovery finds drives, board inputs, network chips and memory modules on
+                machines that have them; a mask narrower than what can be discovered is a
+                sensor the page can see in the list and refuse to save.
+            -->
+            <sensors type="CSVListField">
+                <Required>Y</Required>
+                <Default>cpu,pch</Default>
+                <MaskPerItem>Y</MaskPerItem>
+                <Mask>/^(cpu|pch|acpi|nvme|drive|board|nic|dimm|other)$/</Mask>
+                <ValidationMessage>Choose from the sensor groups this machine reports.</ValidationMessage>
+            </sensors>
+            <!--
+                How often a decision is made. Two seconds is the floor because the tachometer
+                on this class of chip is itself averaged over a window and a loop faster than
+                the sensor tells you nothing new; 120 is the ceiling because the watchdog is
+                six cycles long and a ten-minute watchdog is not one.
+            -->
+            <interval type="IntegerField">
+                <Required>Y</Required>
+                <Default>10</Default>
+                <MinimumValue>2</MinimumValue>
+                <MaximumValue>120</MaximumValue>
+                <ValidationMessage>A decision is made every 2 to 120 seconds.</ValidationMessage>
+            </interval>
+
+            <!--
+                The floor, and the most important number on this page.
+
+                It is NOT the floor the plugin drives to. The floor it drives to is the higher
+                of this and the one measured on the hardware with the floor test, and where
+                nothing has been measured the plugin drives nothing at all whatever is typed
+                here. This is the owner's own limit on top of that - "I do not want this fan
+                below 40% whatever the curve says" - and it can only ever raise the floor,
+                never lower it. 20 is the lowest it accepts, not because 20 is safe on any
+                particular fan, but because a page that let somebody type 0 would be a page
+                that looked as though 0 were a setting.
+            -->
+            <floor_duty type="IntegerField">
+                <Required>Y</Required>
+                <Default>40</Default>
+                <MinimumValue>20</MinimumValue>
+                <MaximumValue>100</MaximumValue>
+                <ValidationMessage>The floor is a percentage between 20 and 100.</ValidationMessage>
+            </floor_duty>
+            <!-- what the manual mode holds. Held up to the floor, never down to it. -->
+            <manual_duty type="IntegerField">
+                <Required>Y</Required>
+                <Default>70</Default>
+                <MinimumValue>20</MinimumValue>
+                <MaximumValue>100</MaximumValue>
+                <ValidationMessage>A duty is a percentage between 20 and 100.</ValidationMessage>
+            </manual_duty>
+            <!--
+                The curve: temperature:percent, in rising order of temperature. Stored as one
+                string rather than as a grid of its own because it is read back out of
+                config.xml by a Python daemon with no model to help it, and because four
+                numbers are easier to read in one line than in four rows. curve.py parses it
+                again at that end and refuses what it cannot read, which is the second of the
+                two checks - this mask is the first.
+            -->
+            <points type="TextField">
+                <Required>Y</Required>
+                <Default>40:60,50:75,60:90,70:100</Default>
+                <Mask>/^\s*\d{1,3}\s*:\s*\d{1,3}\s*(,\s*\d{1,3}\s*:\s*\d{1,3}\s*){1,7}$/</Mask>
+                <ValidationMessage>Write the curve as degrees:percent pairs, such as 40:60,50:75,60:90,70:100 - between two and eight of them.</ValidationMessage>
+            </points>
+            <!--
+                Above this temperature the curve is not consulted at all and the duty is 100,
+                applied at once, whatever the dwell and the hysteresis would otherwise have
+                said.
+            -->
+            <limit_c type="IntegerField">
+                <Required>Y</Required>
+                <Default>70</Default>
+                <MinimumValue>40</MinimumValue>
+                <MaximumValue>100</MaximumValue>
+                <ValidationMessage>The limit is a temperature between 40 and 100 C.</ValidationMessage>
+            </limit_c>
+            <!--
+                And above THIS one the plugin stops being in the way: it hands every fan back
+                to the hardware and the daemon exits. A machine that is still climbing at full
+                duty has demonstrated that this plugin is not what is keeping it cool, and the
+                most useful thing it can then do is return the chip to a control law that was
+                written by whoever built the board.
+            -->
+            <panic_c type="IntegerField">
+                <Required>Y</Required>
+                <Default>85</Default>
+                <MinimumValue>45</MinimumValue>
+                <MaximumValue>110</MaximumValue>
+                <ValidationMessage>The panic point is a temperature between 45 and 110 C.</ValidationMessage>
+            </panic_c>
+
+            <!--
+                The two numbers that stop a fan hunting, and they only ever apply on the way
+                down. Going up is immediate: a dwell on the way up would be a dwell spent hot.
+            -->
+            <hysteresis_c type="IntegerField">
+                <Required>Y</Required>
+                <Default>4</Default>
+                <MinimumValue>0</MinimumValue>
+                <MaximumValue>20</MaximumValue>
+                <ValidationMessage>The hysteresis is 0 to 20 C.</ValidationMessage>
+            </hysteresis_c>
+            <dwell_seconds type="IntegerField">
+                <Required>Y</Required>
+                <Default>30</Default>
+                <MinimumValue>0</MinimumValue>
+                <MaximumValue>600</MaximumValue>
+                <ValidationMessage>The dwell is 0 to 600 seconds.</ValidationMessage>
+            </dwell_seconds>
+            <!--
+                The duty is rounded UP to this. Most of what a temperature does in a firewall
+                is wobble by a degree, and a duty that followed every degree would be a write
+                to the chip every interval for ever - which matters here more than it would
+                elsewhere, because the kernel's own reader of this chip takes no lock and
+                every write of ours is a window against it. Up rather than to nearest, so that
+                the fan is never slower than the curve asked for.
+            -->
+            <step type="IntegerField">
+                <Required>Y</Required>
+                <Default>5</Default>
+                <MinimumValue>1</MinimumValue>
+                <MaximumValue>25</MaximumValue>
+                <ValidationMessage>The step is 1 to 25 percent.</ValidationMessage>
+            </step>
+
+            <!--
+                The one field on this page that is a signature rather than a setting.
+
+                The shipped table refuses control on any model nobody has measured, which is
+                every model but the one the plugin was written on - and on that one too, until
+                its floor has been measured. This is how somebody says "this is my machine, I
+                have read what the page says about it, I am watching it". It does not lower the
+                floor, it does not skip the floor measurement, and it does not silence
+                anything. It does exactly two things: it satisfies the permission line of the
+                safety contract, leaving the other five to hold on their own, and it allows the
+                floor test to run on hardware whose chip the table does not describe - which the
+                test otherwise refuses, and without which no unlisted appliance could ever gain
+                its first measurement and this table could never grow.
+            -->
+            <accept_unmeasured type="BooleanField">
+                <Required>Y</Required>
+                <Default>0</Default>
+            </accept_unmeasured>
+        </general>
+    </items>
+</model>

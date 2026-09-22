@@ -1,0 +1,6 @@
+# Everything here is read by FreeBSD: shell scripts, rc scripts, Python and
+# configuration files. A CRLF checkout on Windows must not turn into a CRLF file
+# on the firewall, where /bin/sh would read the carriage return as part of the
+# command and an rc script would fail in a way nobody would guess from the error.
+* text=auto eol=lf
+*.png binary

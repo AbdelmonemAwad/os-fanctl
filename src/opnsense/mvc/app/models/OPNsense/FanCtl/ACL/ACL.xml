@@ -1,0 +1,17 @@
+<acl>
+    <page-system-fanctl>
+        <name>System: Fan Control</name>
+        <!--
+            One tag for the page and its API, as both sibling plugins do. It is worth being
+            clear about what it grants, because it is more than a settings page usually is:
+            somebody with this tag can write a duty to a fan register and can measure the duty
+            at which a fan stops, which is a thing that stops a fan on purpose for a few
+            seconds. It is not a read-only tag and it should not be handed out as one.
+        -->
+        <description>Allow access to fan control: the settings, the fan readings, the hardware probe, and the floor test that briefly stops a fan</description>
+        <patterns>
+            <pattern>ui/fanctl/*</pattern>
+            <pattern>api/fanctl/*</pattern>
+        </patterns>
+    </page-system-fanctl>
+</acl>

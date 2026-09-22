@@ -1,0 +1,73 @@
+<metadata>
+    <!--
+        The element name is the widget id, and core uses it as the key of this widget in every
+        user's saved dashboard layout. Renaming it would silently drop the widget off the
+        dashboards it is already on, so it stays "fanctl".
+
+        Every string in <translations> is passed through gettext() by the dashboard controller, so
+        the English text here is the msgid the plugin's i18n catalogues translate. Nothing the
+        widget prints is written in the JavaScript.
+
+        NOTHING inside <translations>, including a comment. The controller does
+
+            $translations = (array)($metadataAttributes->translations ?? []);
+            foreach ($translations as $key => $value) { $translations[$key] = gettext($value); }
+
+        (V: Core/Api/DashboardController.php:124,136 on OPNsense 26.7.4_1) and an XML comment in
+        there arrives as a "comment" key like any other child. One comment is a SimpleXMLElement,
+        which gettext() coerces through __toString() and nobody notices. Two or more are an array,
+        and gettext() raises a TypeError that is caught and turned into
+
+            {"errorMessage":"Unexpected error, check log for details"}
+
+        from get_dashboard - which is the API the whole dashboard is built from, so EVERY widget
+        disappears and the Lobby shows one red box. Measured here: three comments in this element
+        emptied the dashboard, and moving them out brought it back.
+
+        So the notes that belong to those strings are written here, above the element, where they
+        cost nothing. Nobody should have to learn this the way it was learned.
+
+        ==== the strings ======================================================================
+
+        mode_*      What the plugin is doing, in one line above the bars. "monitor" is the default
+                    and it is not a failure: it means the plugin is reading and writing nothing,
+                    which is what it does until somebody has measured a floor in front of the
+                    machine.
+
+        incident    The one red thing this widget has. It says what to do rather than what
+                    happened, because a restore that failed is the single state in this plugin
+                    that a person has to act on, and a warm reboot does not necessarily clear a
+                    fan register.
+
+        state_*     A channel reading zero is not a stopped fan. It may be a header with no fan on
+                    it, or a fan whose tachometer is not wired to this chip, and nothing in
+                    software can tell those apart - so the word "stopped" is never used about one.
+    -->
+    <fanctl>
+        <filename>FanCtl.js</filename>
+        <link>/ui/fanctl</link>
+        <endpoints>
+            <endpoint>/api/fanctl/service/*</endpoint>
+        </endpoints>
+        <translations>
+            <title>Fan Control</title>
+            <mode_monitor>reading only - no fan is being driven</mode_monitor>
+            <mode_curve>following the curve</mode_curve>
+            <mode_manual>held at a fixed speed</mode_manual>
+            <not_running>Fan control is not running. These readings were taken just now.</not_running>
+            <disabled>Fan control is turned off.</disabled>
+            <incident>The fans could not be handed back. Power the appliance off and on - a restart may not clear it.</incident>
+            <state_turning>turning</state_turning>
+            <state_driven>driven by this plugin</state_driven>
+            <state_silent>no tachometer signal</state_silent>
+            <silent_summary>%s channels report no tachometer signal</silent_summary>
+            <unit_rpm>rpm</unit_rpm>
+            <over_limit>At or above the limit, where the fans go to full speed</over_limit>
+            <over_panic>Above the panic point - the plugin hands the fans back here</over_panic>
+            <scale>Scale ends at the panic point, %s; the mark is the limit, %s</scale>
+            <nodata>No fan or temperature readings yet.</nodata>
+            <stale>The readings are from %s and are no longer being updated.</stale>
+            <unreachable>Could not read the fan control status.</unreachable>
+        </translations>
+    </fanctl>
+</metadata>

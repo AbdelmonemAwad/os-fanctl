@@ -1,0 +1,538 @@
+#!/bin/sh
+# Copyright (C) 2026 Abdelmonem Awad <eg2@live.com>. BSD 2-Clause License.
+
+# PROVIDE: fanctl
+# REQUIRE: LOGIN
+# KEYWORD: shutdown
+
+#
+# The fan controller. One supervised process, and a stop that has to do two things
+# rather than one - which is the whole reason this is written out by hand instead of
+# being handed to rc.subr as a single command.
+#
+#   fanctl.py daemon   reads the temperatures, decides a duty per fan, writes it, and
+#                      hands every fan back to the hardware before it dies.
+#
+# KEYWORD: shutdown is not a formality here. A Super I/O fan register is not
+# necessarily cleared by a warm reboot: a machine that went down with a duty pinned by
+# this plugin can come back up with that duty still pinned, now with nothing running
+# that knows it is there and the firmware's own fan curve out of the picture. So the
+# shutdown sequence runs the stop below, and the stop below ends in a restore.
+#
+# Nothing here is started by installing the plugin, and nothing here starts because a
+# fan controller exists. The switch is off until somebody turns it on, having read what
+# the plugin proposes for their machine - because a duty written to a fan header nobody
+# has measured is the one mistake in this plugin that ends with hot silicon.
+#
+# The switch is what /etc/rc consults at boot, and that is all it is for. Whether the
+# controller should be running at any other moment is recorded in config.xml, where the
+# settings page writes it, and the page reaches this script through configd with the
+# "one" prefix so that the decision is not made twice from two files that can disagree.
+# "enable" and "disable" - rc.subr's own - are how the boot switch is written.
+#
+# That separation has a consequence at the bottom of this file, and it is the one thing
+# here that must be read before anything else is changed: because the controller can
+# legitimately be running while the boot switch says NO, the two verbs that hand the
+# fans back may not be gated on that switch. rc.subr gates them by default. See the
+# case statement above run_rc_command.
+#
+# Settings, in /usr/local/etc/rc.conf.d/fanctl:
+#
+#   fanctl_enable (bool)       NO by default. Nothing starts at boot until it is YES.
+#   fanctl_stop_timeout (int)  seconds the daemon is given to put the fans back before
+#                              it is killed outright. Default 25, and deliberately
+#                              generous: the daemon may be part way through a spin-up
+#                              measurement, and every path it can take out of that ends
+#                              in a restore. A kill is the one thing on this machine
+#                              that can leave a fan held, so the wait is long enough
+#                              that it is never reached on a healthy machine. 1 to 999,
+#                              written without a leading zero - see below.
+#
+
+. /etc/rc.subr
+
+name="fanctl"
+rcvar=fanctl_enable
+
+load_rc_config $name
+
+: ${fanctl_enable:="NO"}
+: ${fanctl_stop_timeout:="25"}
+
+# A timeout this script cannot do arithmetic on would take the shell down in the middle
+# of a stop, which is the worst possible moment: a stop that dies half way through is a
+# stop that has signalled the daemon and not waited for it, has not removed the
+# pidfiles, and has not reached the restore at the end. So the accepted spelling is
+# exactly one to three digits with no leading zero, and everything else - including the
+# three spellings that look numeric and are not - becomes the default.
+#
+# Measured on this machine (FreeBSD 15.1-RELEASE-p3, /bin/sh), which is why the pattern
+# is not the obvious *[!0-9]*:
+#
+#   t=08;  echo $((t * 5))   ->  sh: arithmetic expression: variable conversion
+#                                error: "t * 5"   and the shell EXITS, status 2
+#   t=00;  echo $((t * 5))   ->  0         a stop with no grace period at all: the
+#                                          daemon is SIGKILLed before it can hand
+#                                          anything back
+#   t=010; echo $((t * 5))   ->  40        octal. Somebody who wrote 10 got 8 seconds
+#
+case "${fanctl_stop_timeout}" in
+[1-9]|[1-9][0-9]|[1-9][0-9][0-9])	;;
+*)					fanctl_stop_timeout=25 ;;
+esac
+
+# Done once, here, and never again. The arithmetic on a number that came from a file
+# outside this script happens before anything has been signalled: if it were ever to
+# fail, it fails with the daemon still running and every one of its own failsafes
+# intact, rather than in the gap between the SIGTERM and the restore.
+fanctl_stop_ticks=$((fanctl_stop_timeout * 5))
+
+# Not accepted as user input. Which program is run is this plugin's business and not a
+# setting, and an rc.conf that could redirect it would be a way to run anything at all
+# as root at the next boot. (rc.subr keeps hooks of its own that an rc.conf.d file can
+# still use - ${name}_program, ${name}_setup, ${name}_prepend - so this closes one door
+# and not the corridor; writing that file already needs root.)
+fanctl_script="/usr/local/opnsense/scripts/fanctl/fanctl.py"
+
+# Each of these names is written down in one other place, and what is here is a copy of
+# that one: fanctl.py writes these pidfiles through daemon(8) and reads them back, and
+# newsyslog signals the supervisor named in the second. Two spellings of any of them
+# would mean two answers to "is the controller running", and the second answer would
+# always be "no".
+fanctl_rundir="/var/run/fanctl"
+fanctl_pid="${fanctl_rundir}/fanctl.pid"
+fanctl_super="${fanctl_rundir}/fanctl.supervisor.pid"
+fanctl_logdir="/var/log/fanctl"
+fanctl_log="${fanctl_logdir}/fanctl.log"
+
+# The two command lines this plugin can have, which is how a process of ours is
+# recognised when a pidfile cannot be believed. Measured on this machine, with the
+# daemon(8) line fanctl.py's start() builds (-t fanctl, -p, -P, and the script itself as
+# the command, which the kernel runs through its own #! interpreter):
+#
+#   child       /usr/local/bin/python3 /usr/local/opnsense/scripts/fanctl/fanctl.py \
+#                   daemon (python3.13)
+#   supervisor  daemon: fanctl[40168] (daemon)
+#
+# Neither pattern is anchored at its end, and that is the measurement talking: ps(1)
+# appends the kernel's own name for the process in parentheses whenever it differs from
+# argv[0], so the child's line ends in "(python3.13)" and an anchored pattern matched
+# nothing. Both are still narrow enough that "fanctl.py status" - the settings page
+# asking a question - does not match, and neither does this script's own /bin/sh line.
+fanctl_child_argv="${fanctl_script} daemon"
+fanctl_super_argv="daemon: ${name}["
+
+# rc.subr is deliberately NOT told about a pidfile or a procname here, and that is a
+# considered choice rather than an omission. The process daemon(8) supervises is
+# /usr/local/bin/python3, so a procname would match every python on the firewall - the
+# collector of a sibling plugin among them - and rc.subr's own "already running" check
+# would then be answering about somebody else's process. Every question this script
+# answers about what is running, it answers from the pidfile itself, below - and only
+# when the pidfile has nothing to say, and only where a wrong answer would cost a fan,
+# from the command line of what is actually running. fanctl_strays() is that second
+# question and says why it is allowed to exist.
+start_precmd="fanctl_prestart"
+start_cmd="fanctl_start"
+stop_cmd="fanctl_stop"
+status_cmd="fanctl_status"
+extra_commands="reload restore"
+reload_cmd="fanctl_reload"
+restore_cmd="fanctl_restore"
+
+#
+# The pid in $1, but only when a process with that pid is alive AND is ours. Everything
+# else - no file, an empty file, a pid whose process died without tidying up after
+# itself, a pid something else is using now - reads as nothing, so the rest of this
+# script never has to ask twice whether a pidfile means anything.
+#
+# The last of those is not hypothetical. daemon(8) removes both pidfiles when the
+# child exits (measured: a -p/-P pair left neither file behind), so a pidfile that
+# outlives its process is the signature of the one case this script is arranged around
+# - a controller that was killed - and by then that number may belong to something
+# else entirely. On "kill -0" alone this script would report a stopped controller as
+# running, hide an incident behind that report, refuse to start, and send SIGTERM and
+# then SIGKILL to a stranger. So the argv has to match too, and it has to match
+# "fanctl.py daemon" rather than "fanctl.py": the page asks for a status every few
+# seconds, and one of those is a live process whose command line contains this
+# plugin's script and which must never be mistaken for the controller. fanctl.py's
+# read_pid() has rejected pid <= 1 from the start; the same rule is here: a pidfile
+# holding "1" would mean signalling init.
+#
+fanctl_pidof()
+{
+	local _pid _junk
+
+	[ -s "$1" ] || return 0
+
+	# daemon(8) writes the pid with NO trailing newline (measured: 5 bytes for a
+	# five-digit pid), and read(1) reports failure on an unterminated last line even
+	# though it has already assigned the value. Taking that exit status as "no pid"
+	# is how a running daemon reports itself stopped - and a controller believed
+	# stopped is a controller somebody starts a second copy of. So the value is read
+	# first and judged afterwards: the validation below is what decides, and the exit
+	# status of read is ignored.
+	read _pid _junk < "$1" 2> /dev/null
+	case "${_pid}" in
+	''|*[!0-9]*)	return 0 ;;
+	esac
+	[ "${_pid}" -gt 1 ] 2> /dev/null || return 0
+	kill -0 "${_pid}" 2> /dev/null || return 0
+
+	case "$(ps -ww -o args= -p "${_pid}" 2> /dev/null)" in
+	*"${fanctl_child_argv}"*|"${fanctl_super_argv}"*)	echo "${_pid}" ;;
+	esac
+	return 0
+}
+
+#
+# Any live process of ours that no pidfile is admitting to, found by what it is running
+# rather than by what a file says.
+#
+# It exists for one case, and that case is the sharpest edge in this script. The
+# restore at the end of a stop is a no-op only when this plugin is driving nothing.
+# Run underneath a controller that IS driving something, it releases those channels
+# and clears the record of which ones were held - and fanctl.py writes that record
+# once, when it takes control, and not again (mark_held() is reached only on the "if
+# not driving" transition). From that moment the controller is driving fans that
+# nothing on disk says are driven, and the next kill leaves a duty pinned with nothing
+# left to say so and no incident recorded. So before this script hands the fans back,
+# it makes sure there is nobody left to hand them back underneath. One ps(1), paid on
+# a stop and on a status that found no pidfile.
+#
+# The answer is one line, space separated, however many it finds: it ends up inside a
+# status line, and OPNsense reads that line as a line.
+#
+fanctl_strays()
+{
+	local _pid _args _found
+
+	_found=$(ps -axww -o pid= -o args= 2> /dev/null | while read _pid _args; do
+		case "${_args}" in
+		*"${fanctl_child_argv}"*|"${fanctl_super_argv}"*)	printf '%s ' "${_pid}" ;;
+		esac
+	done)
+	echo ${_found}
+}
+
+#
+# Ask processes to stop, and wait for them. $1 gets the signal; $2 is everything to
+# wait for, which is not always the same list.
+#
+# In the ordinary case the signal goes to the daemon(8) supervisor rather than to the
+# program itself, because daemon(8) forwards it: "if the monitoring daemon receives
+# software termination signal (SIGTERM) it forwards it to the spawned process. Normally
+# it will cause the child to exit, remove the pidfile(s) and then terminate."
+# (daemon(8), FreeBSD 15.1). So the program is asked exactly once and nothing is left
+# behind. Signalling both would deliver a second SIGTERM in the middle of the
+# tidying-up the first one asked for - which here is in the middle of handing the fans
+# back to the hardware.
+#
+# The stray path below cannot tell a supervisor from its child, so it signals both. That
+# is survivable where the ordinary path would not bother: fanctl.py's _on_term() only
+# sets a flag, and Python retries interrupted syscalls of its own accord, so a second
+# SIGTERM arriving during the restore does not cut it short.
+#
+fanctl_terminate()
+{
+	local _signal _wait _waited _left _pid
+
+	_signal="$1"
+	_wait="$2"
+	[ -n "${_signal}" ] || return 0
+
+	kill -TERM ${_signal} 2> /dev/null
+
+	_waited=0
+	while :; do
+		_left=
+		for _pid in ${_wait}; do
+			kill -0 "${_pid}" 2> /dev/null &&
+			    _left="${_left}${_left:+ }${_pid}"
+		done
+		[ -n "${_left}" ] || return 0
+		[ ${_waited} -ge ${fanctl_stop_ticks} ] && break
+		sleep 0.2
+		_waited=$((_waited + 1))
+	done
+
+	warn "${name}: pid ${_left} would not stop within ${fanctl_stop_timeout} seconds"
+	kill -KILL ${_left} 2> /dev/null
+	return 0
+}
+
+#
+# Wait for a pid to appear in a pidfile and for that pid to be alive.
+#
+# Polled, not slept through. A flat "sleep 1" after the start is wrong in both
+# directions: too long every time it worked, and too short on a machine that is busy
+# booting, where the pidfile arrives a moment later and a start that succeeded is
+# reported as a failure. Five seconds, a tenth at a time, is far longer than a healthy
+# start needs and far shorter than anybody would sit watching.
+#
+fanctl_await()
+{
+	local _file _waited _pid
+
+	_file="$1"
+	_waited=0
+
+	while [ ${_waited} -lt 50 ]; do
+		_pid=$(fanctl_pidof "${_file}")
+		if [ -n "${_pid}" ]; then
+			echo "${_pid}"
+			return 0
+		fi
+		sleep 0.1
+		_waited=$((_waited + 1))
+	done
+	return 1
+}
+
+#
+# Everything alive that is ours: the pidfile's answer if it has one, and only if it has
+# none, the argv scan. One place, so that prestart, start and stop cannot disagree
+# about whether a controller exists.
+#
+fanctl_running()
+{
+	local _pid
+
+	_pid=$(fanctl_pidof "${fanctl_pid}")
+	[ -n "${_pid}" ] || _pid=$(fanctl_strays)
+	echo ${_pid}
+}
+
+fanctl_prestart()
+{
+	local _pid
+
+	if [ ! -x "${fanctl_script}" ]; then
+		warn "${name}: ${fanctl_script} is missing"
+		return 1
+	fi
+
+	# 0755 on the run directory like the rest of /var/run; 0750 on the log, because
+	# what the controller logs is what it did to the fans and what the chip answered,
+	# which is diagnostic detail about the hardware. These are the same modes
+	# fanctl.py sets when it makes the directories itself, so whichever of the two
+	# arrives first, the second finds nothing to change.
+	install -d -o root -g wheel -m 0755 "${fanctl_rundir}" || return 1
+	install -d -o root -g wheel -m 0750 "${fanctl_logdir}" || return 1
+	install -d -o root -g wheel -m 0750 /var/db/fanctl || return 1
+
+	# Asked BEFORE the restore below, and that order is the whole point of these four
+	# lines. A restore run underneath a live controller is the one call in this script
+	# that makes things worse rather than better - see fanctl_strays() for what it
+	# destroys - and "service fanctl onestart" on a machine that is already running it
+	# is all it takes to reach that. fanctl.py's own start() has always checked this
+	# before restoring anything; this script used to check it one function too late.
+	_pid=$(fanctl_running)
+	if [ -n "${_pid}" ]; then
+		return 0		# fanctl_start says so, once, below
+	fi
+
+	# Whatever the last run left behind. A restore here is a no-op unless the state
+	# files say this plugin was driving something when it last stopped existing -
+	# which is the signature of a daemon that was killed rather than stopped, or of a
+	# machine that lost power mid-cycle. Putting that right BEFORE starting is the
+	# order that matters: the daemon captures what the chip was doing as its baseline,
+	# and a baseline captured from our own leftover duty would record our duty as the
+	# hardware's own setting and hand it back for ever.
+	"${fanctl_script}" restore > /dev/null 2>&1 || true
+
+	return 0
+}
+
+fanctl_start()
+{
+	local _pid
+
+	_pid=$(fanctl_running)
+	if [ -n "${_pid}" ]; then
+		echo "${name} is already running as pid ${_pid}."
+		return 0
+	fi
+
+	echo "Starting ${name}."
+
+	# fanctl.py start is what launches the supervised process, and it is asked rather
+	# than duplicated here: the daemon(8) command line carries the pidfile names, the
+	# log and the -H that makes newsyslog's signal mean "reopen this file", and one
+	# copy of that line is one place for it to be wrong. It refuses on its own account
+	# when fan control is turned off in config.xml, which is why the output is shown
+	# rather than discarded - that refusal is the answer.
+	if ! "${fanctl_script}" start; then
+		warn "${name}: the fan controller could not be started"
+		return 1
+	fi
+
+	if ! fanctl_await "${fanctl_pid}" > /dev/null; then
+		warn "${name}: the fan controller did not stay up. Its last words were:"
+		tail -n 10 "${fanctl_log}" 2> /dev/null
+		# It may have got as far as writing a duty before it died. Nothing else on
+		# the machine would put that back.
+		"${fanctl_script}" restore > /dev/null 2>&1 || true
+		return 1
+	fi
+
+	return 0
+}
+
+fanctl_stop()
+{
+	local _pid _super _stray _report
+
+	_pid=$(fanctl_pidof "${fanctl_pid}")
+
+	if [ -n "${_pid}" ]; then
+		echo "Stopping ${name}."
+		_super=$(fanctl_pidof "${fanctl_super}")
+		fanctl_terminate "${_super:-${_pid}}" "${_pid} ${_super}"
+		# daemon(8) removes its own pidfiles on the way out; these are the ones it
+		# did not get round to because it had to be killed.
+		rm -f "${fanctl_pid}" "${fanctl_super}"
+	else
+		echo "${name} is not running."
+	fi
+
+	# Nobody left underneath. The pidfiles have been believed, and only now, when they
+	# have nothing more to say, is the machine asked directly - because the restore
+	# below would otherwise be capable of stripping a live controller of the record of
+	# what it is holding.
+	_stray=$(fanctl_strays)
+	if [ -n "${_stray}" ]; then
+		warn "${name}: no pidfile named it, but pid ${_stray} is still running the" \
+		    "controller. Stopping that first."
+		fanctl_terminate "${_stray}" "${_stray}"
+		rm -f "${fanctl_pid}" "${fanctl_super}"
+	fi
+
+	# And this line is why this function exists at all. The daemon hands the fans back
+	# in its own exit path, and that path is the one every clean stop takes - but a
+	# daemon that had to be killed never ran it, and a machine that is shutting down
+	# must not be left with a fan held by a process that no longer exists. So a stop
+	# always ends by asking, whether or not anything appeared to be running: the
+	# request is a no-op when there is nothing to hand back, and the one case where it
+	# is not a no-op is the case nothing else on this machine would fix.
+	_report=$("${fanctl_script}" restore 2>&1) || {
+		warn "${name}: the fans could NOT be handed back to the hardware."
+		warn "${name}: ${_report}"
+		warn "${name}: power the appliance off and on to return them to firmware control."
+		return 1
+	}
+
+	return 0
+}
+
+fanctl_status()
+{
+	local _pid _stray
+
+	_pid=$(fanctl_pidof "${fanctl_pid}")
+
+	# The wording is not free. OPNsense reads this line and looks in it for "not
+	# running" first and for "is running" second - statusAction() in
+	# ApiMutableServiceControllerBase.php does strpos($response, 'not running') > 0
+	# and only then strpos($response, 'is running') > 0 - so the two phrases must
+	# never appear together, and neither may start at the first character.
+	if [ -n "${_pid}" ]; then
+		echo "${name} is running as pid ${_pid}."
+		return 0
+	fi
+
+	# A controller with no pidfile to its name. Said out loud rather than rounded down
+	# to "not running", because "not running" would be this script telling a user
+	# something it has not established, and because it is the state in which somebody
+	# is most likely to start a second copy.
+	_stray=$(fanctl_strays)
+	if [ -n "${_stray}" ]; then
+		echo "${name} is running as pid ${_stray}, although no pidfile names it." \
+		    "'service ${name} stop' stops it and hands the fans back."
+		return 0
+	fi
+
+	# An incident file is the one thing worth saying out loud from a status line: the
+	# controller is not running AND the fans were not successfully handed back, which
+	# is the only state in this plugin that a human has to act on.
+	if [ -f /var/db/fanctl/incident.json ]; then
+		echo "${name} is not running, and the last restore FAILED:" \
+		    "the fans may still be held at the duty it wrote." \
+		    "Power the appliance off and on to return them to firmware control."
+		return 1
+	fi
+
+	echo "${name} is not running."
+	return 1
+}
+
+#
+# There is no reload. The daemon reads its settings once, at start: the curve, the
+# floor, the interval and which channels it may touch are all decided before the first
+# write, and a daemon that re-read them underneath itself would be changing the rules
+# of a control loop that is already holding a fan at a duty chosen under the old ones.
+# This exists so that a caller which asks for a reload is given a working controller
+# instead of an error - and a restart, unlike a reload, passes through a restore, which
+# is exactly the right thing to do when the rules have changed.
+#
+fanctl_reload()
+{
+	fanctl_stop || return 1
+	fanctl_prestart || return 1
+	fanctl_start
+}
+
+#
+# Hand the fans back, now, without stopping anything.
+#
+# Its own command because three other things need it and none of them should have to
+# know how: the package's pre-deinstall, the uninstall script, and whoever is standing
+# in front of a machine that is behaving oddly and wants the firmware back in charge in
+# one line they can remember.
+#
+fanctl_restore()
+{
+	"${fanctl_script}" restore
+}
+
+#
+# Before rc.subr runs any of the above, it decides whether it is willing to, and for
+# every verb except a short list it decides by ${rcvar}. Measured on this machine
+# (FreeBSD 15.1-RELEASE-p3), with a copy of this script's own wiring and the shipped
+# default for the switch:
+#
+#   ./fanctl restore    ->  "Cannot 'restore' fanctl. Set fanctl_enable to YES in
+#                            /etc/rc.conf or use 'onerestore' instead of 'restore'."
+#                           exit 0, and restore_cmd never ran
+#   ./fanctl stop       ->  the same, exit 0, stop_cmd never ran
+#   ./fanctl faststop   ->  nothing printed at all, exit 0, stop_cmd never ran
+#
+# rc.subr exempts "stop" only while ${rc_pid} is set, and it is never set here because
+# this script gives rc.subr no pidfile and no procname on purpose (see above). And
+# faststop is precisely what the shutdown sequence uses: /etc/rc.shutdown does
+# "run_rc_script $_rc_elem faststop" for every script it selected with rcorder -k
+# shutdown.
+#
+# So on a machine whose boot switch is NO - the shipped default, and an ordinary state
+# for a machine whose controller was started from the settings page, since that switch
+# is only about boot - the stop at shutdown would be skipped without a word, and a
+# restore asked for at a console would report success having done nothing at all. Both
+# end the same way: a duty pinned in a fan register, the firmware's curve out of the
+# picture, and nothing running that knows it.
+#
+# The two verbs that hand the fans back are therefore raised to their "one" form here,
+# where the decision is written down once, instead of being left to whoever types the
+# command. "one" only tells rc.subr the decision was made elsewhere; it changes nothing
+# on disk, and it is the same thing the configd actions and the package scripts already
+# say. start, restart and reload are deliberately NOT raised: for those the switch is
+# the right answer, and a machine that says it does not run fan control at boot must
+# not be made to.
+#
+fanctl_verb="$1"
+case "$1" in
+stop|faststop|quietstop|forcestop)
+	fanctl_verb="onestop" ;;
+restore|fastrestore|quietrestore|forcerestore)
+	fanctl_verb="onerestore" ;;
+esac
+
+run_rc_command "${fanctl_verb}"

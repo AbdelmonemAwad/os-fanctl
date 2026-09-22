@@ -1,0 +1,370 @@
+{
+  "version": 2,
+  "comment": [
+    "Known appliances, the fan controller inside them, and what may be done with it.",
+    "",
+    "Same shape and the same discipline as os-linkhealth's chassis.json and os-frontpanel's",
+    "panels.json: match on SMBIOS, carry a verify block that says what the hardware under the",
+    "entry must actually be, propose settings, and state plainly how far the proposal has been",
+    "proven. An entry is a claim about a machine we cannot see.",
+    "",
+    "One rule is harder here than in either sibling, and it is the reason this file exists at",
+    "all: a wrong label sends somebody to the wrong socket, but a wrong duty stops a fan, and a",
+    "firewall with a stopped fan cooks itself while nobody is looking. So no entry may drive a",
+    "fan on the strength of having been matched. Three separate things have to be true, and they",
+    "are checked in three different places:",
+    "",
+    "  control      this MODEL has been watched by somebody. Checked by fanctl.py, as the",
+    "               permission line of the contract.",
+    "  drive        this CHANNEL on that model is one somebody identified. Checked by",
+    "               probe.table_permits(), which is what decides whether a channel is offered",
+    "               at all. A model may be permitted while four of its five channels are not.",
+    "  floor        this fan has a MEASURED duty at which it keeps turning - measured on the",
+    "               machine it is running on with 'fanctl.py test', or carried here with a",
+    "               confirmed line behind it. Checked by fanctl.floor_for(). A floor nobody",
+    "               measured is not a floor, it is a guess with a fan behind it.",
+    "",
+    "WHAT CHANGED IN VERSION 2",
+    "",
+    "  * 'drive' and 'drive_reason' per channel, so that permission for a model is not",
+    "    permission for every header on it.",
+    "  * 'response' per channel: what a response test measured - whether a duty written to",
+    "    that channel actually moves that fan. It is the one fact about fan control that",
+    "    cannot be established by reading, and it now has a place to live.",
+    "  * 'example_models', which is NOT loaded by anything. fanctl.match_model() and",
+    "    probe.load_table() read 'models' and nothing else, so the worked example below can",
+    "    never be matched against a real machine - which is a stronger guarantee than a flag",
+    "    saying 'do not use me'.",
+    "",
+    "Matching uses kenv smbios values, exactly as the two sibling plugins do. maker/product/",
+    "version are regular expressions. The first entry whose every stated field matches wins;",
+    "'generic' is the fallback and proposes nothing at all.",
+    "",
+    "verify is checked against what chip.py actually found before anything is written. An entry",
+    "whose chip, whose HWM window or whose channel list does not match the machine it matched by",
+    "SMBIOS describes a different board wearing the same name, and the plugin then refuses to",
+    "drive anything and says which field disagreed. Reading carries on: reading is always safe.",
+    "",
+    "Adding an appliance is one block and a pull request - see docs/contributing-fans.md. What is",
+    "wanted in it is a measurement, not a datasheet: which channel turns which fan, whether that",
+    "fan answers a duty change, the duty at which it stops, and the name of whoever stood in",
+    "front of the machine.",
+    "",
+    "TWO THINGS ABOUT CHANNEL NAMES AND FLOORS, both of which come from the layer underneath.",
+    "",
+    "A channel is numbered on the chip, from 1. The names used here - SYSFAN, CPUFAN, AUXFAN0 -",
+    "are ncthwm(4) labels for the same registers, and chip.py carries them as aliases and never",
+    "as facts: they say nothing about which fan in the chassis is on which header. On a chip",
+    "whose channels ncthwm has no table for there are no aliases at all, and the names to write",
+    "in an entry are FAN1, FAN2 and so on, in the chip own order.",
+    "",
+    "And a floor written here is never the lowest floor in the system. fanctl-io has a",
+    "compiled-in hard floor and reads /usr/local/etc/fanctl/floor.conf, it refuses anything",
+    "below what those two say, and nothing in this file or on the settings page can lower that.",
+    "A floor here can only be at or above it. That is deliberate: the number that keeps a fan",
+    "turning has to survive a mistake in a JSON file."
+  ],
+  "models": {
+    "sophos-xg-330r2": {
+      "display": "Sophos XG 330 rev 2",
+      "match": {
+        "maker": "^Sophos$",
+        "product": "^XG$",
+        "version": "^330"
+      },
+      "verify": {
+        "chip": "^NCT6779D$",
+        "hwm_base": "0xa30",
+        "channels": ["SYSFAN", "CPUFAN", "AUXFAN0", "AUXFAN1", "AUXFAN2"]
+      },
+      "control": true,
+      "control_reason": "Fan control on this model has been exercised on real hardware: the chip was identified, one channel was taken over, driven and handed back, and the fan on it was measured moving from 1332 rpm to 5844 rpm and back under SmartFan IV. That is what 'control' means here and it is all it means. THE FLOOR IS STILL UNMEASURED: the duty at which this fan keeps turning has not been established on any machine, so floor_for() has nothing to return and the contract's floor line asks for a measurement for every mode EXCEPT a fixed 100%, which needs none - full output is what the chip writes with PWM switched off and it cannot stop a turning fan. So this appliance can be held at full today and cannot be run on a curve, or at any fixed duty below full, until somebody runs the floor test with it in front of them. Permission and a floor are two different questions and this entry answers only the first.",
+      "fans": [
+        {
+          "channel": "SYSFAN",
+          "label": "chassis fan",
+          "sensors": ["cpu", "pch"],
+          "drive": true,
+          "drive_reason": "This is the one channel on this board with a tachometer that answers, and a duty written to it demonstrably moves that fan.",
+          "floor": null,
+          "floor_source": "not measured",
+          "tach": "turning",
+          "response": {
+            "responded": true,
+            "from_pct": 20,
+            "to_pct": 100,
+            "rpm_before": 1332,
+            "rpm_after": 5844,
+            "measured": "XG 330 rev 2, 2026-09-22, by the owner at the machine: the channel was taken over from SmartFan IV, held at 100%, and the tachometer went from 1332 rpm to 5844 rpm - 4.4 times. Handing it back restored mode 4 (SmartFan IV) at raw 50. This is the fact that 'response' exists to record, and it cannot be obtained by reading."
+          },
+          "confirmed": "XG 330 rev 2 (smbios.planar.version 330r2), 2026-09-22. (1) The channel reports a real fan: dev.ncthwm.0.SYSFAN read 935-954 rpm over 90 samples, and a userland reader with no write primitive in it read the same number out of the EC window - 941 = 0x03AD (V). (2) The board's own SmartFan IV curve asks this channel for raw 50 - 20% - while the CPU cores sat at 80 C (V). That is the finding this whole plugin turns on: the vendor's curve was tuned for the high-rpm fan the appliance shipped with, and on the fan that is in it now, 20% is almost nothing. (3) Taking the channel over required the MODE to be written before the duty: with the duty first, the chip put its own 0x32 back inside the verify window and the write was refused - 'wrote 0xff to register 0x109 and read back 0x32 (mask 0xff), twice' (V). (4) At 100% the fan reached 5844 rpm and the CPU fell from 81 C to 75-80 C, six degrees for 4.4 times the fan speed, while the chipset went UP from 54.0 C to 56.0 C (V). This chassis is a restricted duct and this fan has little static pressure; anybody expecting a fan curve to be worth many degrees on this machine should read that number first.",
+          "fan_fitted": "Noctua NF-A4x20 PWM, fitted by the owner in place of the original Sophos 40x20 (R, the owner's own account; what is V is the behaviour: ~5844 rpm at 100% and 1332 rpm at 20%).",
+          "curve_note": "A curve for this channel has to start well above 20%, because 20% is what the board was already asking for while the machine was at 80 C."
+        },
+        {
+          "channel": "CPUFAN",
+          "label": "unknown",
+          "sensors": [],
+          "drive": false,
+          "drive_reason": "No tachometer signal has ever been seen on this channel, so nothing is known about what is on it. That is not the same as 'no fan': a header with nothing in it, a fan with no tachometer wire, and a fan on a header this chip does not sample all read as zero, and no software can tell them apart. A response test with somebody at the machine is what would change this line.",
+          "floor": null,
+          "floor_source": "not measured",
+          "tach": "silent",
+          "confirmed": ""
+        },
+        {
+          "channel": "AUXFAN0",
+          "label": "unknown",
+          "sensors": [],
+          "drive": false,
+          "drive_reason": "No tachometer signal has ever been seen on this channel. See CPUFAN.",
+          "floor": null,
+          "floor_source": "not measured",
+          "tach": "silent",
+          "confirmed": ""
+        },
+        {
+          "channel": "AUXFAN1",
+          "label": "unknown",
+          "sensors": [],
+          "drive": false,
+          "drive_reason": "No tachometer signal has ever been seen on this channel. See CPUFAN.",
+          "floor": null,
+          "floor_source": "not measured",
+          "tach": "silent",
+          "confirmed": ""
+        },
+        {
+          "channel": "AUXFAN2",
+          "label": "unknown",
+          "sensors": [],
+          "drive": false,
+          "drive_reason": "No tachometer signal has ever been seen on this channel. See CPUFAN.",
+          "floor": null,
+          "floor_source": "not measured",
+          "tach": "silent",
+          "confirmed": ""
+        }
+      ],
+      "curve": {
+        "points": "40:60,50:75,60:90,70:100",
+        "limit_c": 70,
+        "panic_c": 85,
+        "comment": [
+          "A proposal, and it is still a proposal - but it is no longer an arbitrary one, and",
+          "two measurements now stand behind its endpoints.",
+          "",
+          "It starts at 60 because the board's own curve asked for 20 at 80 C, which on the fan",
+          "fitted now is almost nothing; 60 is far above anything that could stall a fan that",
+          "idles near 940 rpm, and far above what the firmware was asking for.",
+          "",
+          "It reaches 100 at 70 C, and 70 and 85 are exactly what this machine's own sensors",
+          "work out to: the cores publish tjmax 100.0 C (V), and policy.py's rule - full duty",
+          "30 C below a sensor's own limit, hands the fans back 15 C below it - gives 70 and 85",
+          "from that number alone. Two different routes to the same pair is the only check",
+          "available on either.",
+          "",
+          "What is still NOT known is what this curve does to this machine under load, because",
+          "nobody has run it. And what IS known is discouraging about how much any curve can",
+          "achieve here: 4.4 times the fan speed bought six degrees (V)."
+        ]
+      },
+      "notes": [
+        "superio0: <Nuvoton NCT6779D> at port 0x2e-0x2f on isa0 (V). ncthwm0 reads five tach channels and nothing else: sysctl -aW | grep ncthwm returns nothing, so the in-tree driver is read-only by construction (V, and D from CTLFLAG_RD in sys/dev/ncthwm/ncthwm.c).",
+        "The HWM window is at 0xa30, from three independent sources: devinfo -rv reports ncthwm0 at 0xa35-0xa36 (V), ncthwm.c sets .base_offset = 5 and allocates two ports (D), and the board's own DSDT carries Name (IO3B, 0x0A30) (D).",
+        "The chip's own critical-duty backstop is ARMED on channel 1 at raw 255 - full speed - and is NOT armed on channels 2 to 5 (V, fanctl-io status, 2026-09-22). That matters for exactly one thing: on channel 1, a controller that dies with a duty latched has something in hardware behind it. On the other four, a latched duty is latched until a person intervenes.",
+        "Four channels read 0 rpm. That is NOT four stopped fans and this plugin never says it is: a tach of zero means this chip is not being told about a fan there - no fan, or a fan with no tach wire, or a fan on a header this chip does not sample. Nothing in software can tell those apart, so they are reported as silent and are never driven. The appliance also has a power supply with its own fan, which the owner replaced as well, and there is no sensor anywhere on this machine for it (V: nothing in the sysctl tree, and no BMC - /dev/ipmi* does not exist).",
+        "Temperatures on this machine, exhaustively, 2026-09-22 (V): dev.cpu.0..3.temperature (coretemp, on-die, tjmax 100.0 C), dev.pchtherm.0.temperature (Skylake PCH, with its own trip points t0temp 108.0, t1temp 111.0, t2temp 114.0 and ctt 115.0), hw.acpi.thermal.tz0/tz1.temperature (board zones, _CRT 119.1 C each). ncthwm exposes NO temperatures at all although the NCT6779D has temperature inputs, and nobody has read those inputs on this machine. The OPNsense dashboard's own Thermal widget shows pchtherm and the two ACPI zones and does NOT show the cores, which is how an owner comes to see 47 C while his cores are at 74.",
+        "The firmware left its own fan trip points behind in ACPI zone 0: _ACx = 71.1, 55.1, 50.1, 45.1, 40.1 C (V). That is the vendor's fan curve, in a sysctl, written for the fan the appliance shipped with. It is worth knowing and it is not a setting.",
+        "An unsettled reading, recorded rather than smoothed away: with the channel held at a fixed 100% (mode 0, duty raw 255 both times), the tachometer read 5869 rpm at one moment and 5075-5094 rpm forty minutes later (V, three consecutive reads each time, all agreeing with each other). The duty register did not change between them. A 13% drop at a fixed duty has no explanation here - a rail sagging under load and a tachometer that is not counting what we think it counts are both consistent with it - and it is exactly the kind of thing a floor measured in one of those two states would get wrong.",
+        "ncthwm_query_fan_speed() takes no lock at all - there is no mutex in struct ncthwm_softc (D). Two sysctl readers already race each other inside the kernel, and a userland sequence through /dev/io races the kernel with nothing to serialise against. Everything this plugin does is shaped by that: quantised duties so most cycles write nothing at all, one write per change, a read-back after every write which gives hardware control back when it does not agree - and, in probe.py, a second read of every setting before any of them is believed."
+      ]
+    },
+    "sophos-xg-family": {
+      "display": "Sophos XG / XGS (model not measured)",
+      "comment": [
+        "A Sophos box nobody has watched. Worth matching, because naming the hardware tells the",
+        "owner the plugin knows what it is looking at and where to extend the table - and worth",
+        "refusing to drive, because the fan headers on another model of the same family are",
+        "another board's fan headers."
+      ],
+      "match": {
+        "maker": "^Sophos$"
+      },
+      "verify": {},
+      "control": false,
+      "control_reason": "No measurement exists for this model. The plugin reads and reports; it drives nothing.",
+      "fans": [],
+      "hint": "Monitoring works here with no table entry at all. To go further, run the probe on the Hardware tab, then the response test on one channel at a time with the appliance in front of you, then the floor test, and send what you measured - see docs/contributing-fans.md."
+    },
+    "generic": {
+      "display": "unrecognised appliance",
+      "match": {},
+      "verify": {},
+      "control": false,
+      "control_reason": "This machine matches no entry, so nothing is known about which header turns which fan. Reading is safe and is all that is offered.",
+      "fans": [],
+      "hint": "The probe on the Hardware tab says what chip was found, what each channel reports, which of them are under an automatic curve, and what the chip's own backstop is set to - all of it read, none of it written. To let the plugin write, the model needs an entry with a channel somebody identified and a floor somebody measured."
+    }
+  },
+  "example_models": {
+    "comment": [
+      "NOT LOADED BY ANYTHING. fanctl.match_model() and probe.load_table() read 'models' and",
+      "nothing else, so this block cannot be matched against a machine however closely its",
+      "SMBIOS strings resemble the ones below. It is here so that a contributor can see the",
+      "shape of a complete entry - one where every question this table asks has been answered -",
+      "without having to read one that is half empty because the answers are not in yet.",
+      "",
+      "The appliance below does not exist. The numbers in it are invented and marked as such.",
+      "A real entry has V where this one has 'invented'."
+    ],
+    "examplevendor-fw200": {
+      "display": "ExampleVendor FW200 (a worked example - this appliance does not exist)",
+      "match": {
+        "maker": "^ExampleVendor$",
+        "product": "^FW200$",
+        "version": "^rev2"
+      },
+      "verify": {
+        "chip": "^NCT6796D$",
+        "hwm_base": "0x290",
+        "channels": ["SYSFAN", "CPUFAN", "AUXFAN0", "AUXFAN1", "AUXFAN2", "FAN6", "FAN7"]
+      },
+      "control": true,
+      "control_reason": "Invented. In a real entry this sentence says who watched this model and what they saw.",
+      "fans": [
+        {
+          "channel": "CPUFAN",
+          "label": "processor fan, centre of the board",
+          "sensors": ["cpu"],
+          "drive": true,
+          "drive_reason": "Identified by a response test and measured to a floor.",
+          "floor": 35,
+          "floor_source": "measured 2026-10-04: turning at 30%, stopped at 25%, floor is one step above the lowest duty that kept it turning",
+          "tach": "turning",
+          "response": {
+            "responded": true,
+            "from_pct": 40,
+            "to_pct": 70,
+            "rpm_before": 1450,
+            "rpm_after": 2680,
+            "measured": "Invented. In a real entry: the duty this channel was moved from and to, the tachometer before and after, and the fact that it was handed back afterwards."
+          },
+          "confirmed": "Invented. In a real entry this is the longest field in the block, it is written by somebody who was in the room, and it says what the fan did when it was handed back - which is the sentence that matters most and the one people leave out."
+        },
+        {
+          "channel": "SYSFAN",
+          "label": "chassis fan, left",
+          "sensors": ["cpu", "pch"],
+          "drive": false,
+          "drive_reason": "Invented, and it is the interesting half of this example: this channel HAS a turning fan and a response test moved it, but the floor test stopped the fan at every duty it was tried at and no duty has yet been seen to keep it turning. A channel can be fully identified and still not be drivable, and this is what that looks like.",
+          "floor": null,
+          "floor_source": "not measured: every test so far stalled it",
+          "tach": "turning",
+          "response": {
+            "responded": true,
+            "from_pct": 50,
+            "to_pct": 80,
+            "rpm_before": 900,
+            "rpm_after": 1560,
+            "measured": "Invented."
+          },
+          "confirmed": "Invented."
+        },
+        {
+          "channel": "AUXFAN2",
+          "label": "unknown",
+          "sensors": [],
+          "drive": false,
+          "drive_reason": "Invented: a response test moved this channel's duty and the tachometer did not follow. That is NOT 'there is no fan here' - it is equally consistent with a fan whose tach is not wired, a header with nothing on it, and a fan already at the top of its range - and an entry that wrote it down as 'no fan' would be claiming something nobody measured.",
+          "floor": null,
+          "floor_source": "not measured",
+          "tach": "silent",
+          "response": {
+            "responded": false,
+            "from_pct": 50,
+            "to_pct": 80,
+            "rpm_before": 0,
+            "rpm_after": 0,
+            "measured": "Invented."
+          },
+          "confirmed": ""
+        }
+      ],
+      "curve": {
+        "points": "40:50,50:70,60:90,70:100",
+        "limit_c": 70,
+        "panic_c": 85,
+        "comment": [
+          "Invented. A real one says whether the machine was ever run hot with it, and what the",
+          "temperatures did if it was. A curve nobody has loaded is a proposal; say which yours",
+          "is."
+        ]
+      },
+      "notes": [
+        "Invented. Real notes carry what was read from the machine and where each reading came from - the superio line from dmesg, the window from devinfo, whether the chip's own backstop is armed, and anything that did not behave the way the datasheet said it would."
+      ]
+    }
+  },
+  "defaults": {
+    "comment": [
+      "Behind every setting, and deliberately cautious. These are not measurements and are marked",
+      "as none: they are what the plugin falls back to when config.xml has not been written yet,",
+      "chosen so that the fallback is always the loud, cool, safe end of the range.",
+      "",
+      "limit_c and panic_c are the exception, and only on hardware like the reference machine:",
+      "policy.py works the same pair out of this machine's own tjmax of 100.0 C, so on THIS",
+      "appliance these two are both a person's choice and the machine's arithmetic. On an",
+      "appliance with a different CPU they are only a person's choice, made about somebody",
+      "else's machine, which is why the Hardware tab shows the proposal beside them."
+    ],
+    "mode": "monitor",
+    "interval": 10,
+    "floor_duty": 40,
+    "manual_duty": 70,
+    "limit_c": 70,
+    "panic_c": 85,
+    "hysteresis_c": 4,
+    "dwell_seconds": 30,
+    "step": 5,
+    "watchdog_seconds": 60,
+    "points": "40:60,50:75,60:90,70:100",
+    "sensors": "cpu,pch,acpi",
+    "use_limits": true
+  },
+  "contract": {
+    "comment": [
+      "The six things that must all be true before this plugin drives a fan. fanctl.py evaluates",
+      "them every cycle and the page prints them one line each, with the reason beside any that",
+      "is not met. They are named here as well as in the code so that the table and the page say",
+      "them in the same words."
+    ],
+    "fingerprint": "The chip on this machine is the chip the matched entry describes.",
+    "permission": "The matched entry allows control, or the owner has accepted an unmeasured entry in writing.",
+    "baseline": "The mode and duty each channel was under before this plugin touched it have been captured, so hardware control can be handed back exactly as it was found.",
+    "floor": "Every channel to be driven has a floor that was measured, not guessed.",
+    "tach": "Every channel to be driven reports a fan that is turning.",
+    "sensors": "Every temperature the decision needs is being read right now."
+  },
+  "refusals": {
+    "comment": [
+      "What probe.may_drive() answers with when a channel may not be driven, in the order the",
+      "reasons are tried. These are the words the code uses, kept here so that the page, the log",
+      "and the table cannot drift apart - and so that a contributor reading this file can see",
+      "exactly what has to stop being true before a channel is offered.",
+      "",
+      "They are a gate in front of the contract, not a copy of it: the contract is judged every",
+      "cycle while the daemon runs, and these decide whether a channel is ever a candidate."
+    ],
+    "no-helper": "The hardware layer could not be loaded on this machine. Fan speeds may still be readable through the kernel driver; nothing can be set.",
+    "no-device": "/dev/io is not present, so no program in userland can reach the fan controller's window here.",
+    "no-permission": "The helper must run as root with kern.securelevel below 1. On a machine raised above that, this plugin reads and never writes - which is the correct behaviour for a hardened firewall, not a fault.",
+    "unknown-chip": "A Super I/O answered and it is not one fanctl-io drives. The sensors are still read and shown; nothing is controlled. Adding a chip is a row in fanctl-io.c plus a tachometer conversion, and it should arrive with a measurement rather than with a datasheet reading.",
+    "chip-unreadable": "The helper reached the chip and could not read it.",
+    "unstable-registers": "This channel's settings read differently twice within a second. Either something else is writing to this chip or a read was disturbed, and nothing is driven on the strength of a register in that state.",
+    "held-elsewhere": "Something else has already taken this channel over, and what the helper would restore is not what the channel is doing now. Handing it back would move the fan to the recorded state rather than leaving it where it is.",
+    "no-tachometer": "This channel reports no turning fan. A channel with no tachometer signal cannot be told apart from a stopped fan, so it is never driven.",
+    "not-in-table": "The hardware table does not permit this model, or permits the model and not this channel.",
+    "no-response": "No response test has been run on this channel on this machine, so whether a duty written here reaches a fan is not known - and it cannot be known by reading."
+  }
+}

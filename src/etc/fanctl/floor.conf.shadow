@@ -1,0 +1,42 @@
+# fanctl-io minimum duty, per fan channel.
+#
+# This file is read by fanctl-io itself, not by the Python above it and not by
+# the web page. Nothing on the helper's command line can lower the number that
+# comes out of here, and no such option will be added: the floor has to survive
+# a bug in every layer above it.
+#
+# Format, one rule per line:
+#
+#	default <percent>	applies to every channel with no line of its own
+#	<channel> <percent>	applies to that channel and overrides the default
+#
+# Channels are numbered from 1, as the chip numbers them.
+#
+# Two rules that matter more than the format:
+#
+#   * A value below the compiled-in hard floor is raised to it, and the status
+#     answer says so with floor_source "file-clamped". The file can make a fan
+#     spin faster than the hard floor demands. It cannot make one spin slower.
+#
+#   * A malformed line rejects the WHOLE file and the hard floor applies to
+#     every channel, reported as floor_source "file-rejected". A typo must not
+#     be a quiet way to lower the number that keeps a fan turning.
+#
+# EVERY LINE BELOW IS COMMENTED OUT ON PURPOSE.
+#
+# A floor is a property of a particular fan in a particular chassis: the duty
+# below which that fan stalls, or spins so slowly that it stops moving air.
+# Nobody can know that from here, and it is found by watching one fan on one
+# machine, stepping the duty down and reading the tachometer, with somebody in
+# the room. Until that has been done, the hard floor applies - which is
+# deliberately higher than any fan needs, because refusing is cheap and a
+# stopped fan is not.
+#
+# Once it has been measured, write it down here with the measurement beside it,
+# the way the rest of this plugin does:
+#
+#	# Delta AFB0612EH on channel 1, XG 330 rev 2: still turning at 35%
+#	# (1,040 rpm), stalled at 25% on 2026-09-22 with the lid off.
+#	1 40
+#
+#default 30
