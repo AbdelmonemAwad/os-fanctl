@@ -329,6 +329,9 @@ def smbios():
         'maker': values.get('smbios.planar.maker') or values.get('smbios.system.maker', ''),
         'product': values.get('smbios.planar.product') or values.get('smbios.system.product', ''),
         'version': values.get('smbios.planar.version') or values.get('smbios.system.version', ''),
+        # Some boards keep the model nowhere but the serial (an XGS 136: product 'XGS', the
+        # assembly number inside smbios.planar.serial); an entry may match on it like the others.
+        'serial': values.get('smbios.planar.serial') or values.get('smbios.system.serial', ''),
     }
     # The board block first, as both sibling plugins read it. But a board whose version is a
     # bare number is giving its own revision, not the appliance's model - the XGS 3300 reads
