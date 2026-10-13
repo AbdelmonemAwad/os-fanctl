@@ -75,7 +75,13 @@
       "verify": {
         "chip": "^NCT6779D$",
         "hwm_base": "0xa30",
-        "channels": ["SYSFAN", "CPUFAN", "AUXFAN0", "AUXFAN1", "AUXFAN2"]
+        "channels": [
+          "SYSFAN",
+          "CPUFAN",
+          "AUXFAN0",
+          "AUXFAN1",
+          "AUXFAN2"
+        ]
       },
       "control": true,
       "control_reason": "Fan control on this model has been exercised on real hardware: the chip was identified, one channel was taken over, driven and handed back, and the fan on it was measured moving from 1332 rpm to 5844 rpm and back under SmartFan IV. That is what 'control' means here and it is all it means. THE FLOOR IS STILL UNMEASURED: the duty at which this fan keeps turning has not been established on any machine, so floor_for() has nothing to return and the contract's floor line asks for a measurement for every mode EXCEPT a fixed 100%, which needs none - full output is what the chip writes with PWM switched off and it cannot stop a turning fan. So this appliance can be held at full today and cannot be run on a curve, or at any fixed duty below full, until somebody runs the floor test with it in front of them. Permission and a floor are two different questions and this entry answers only the first.",
@@ -83,7 +89,10 @@
         {
           "channel": "SYSFAN",
           "label": "chassis fan",
-          "sensors": ["cpu", "pch"],
+          "sensors": [
+            "cpu",
+            "pch"
+          ],
           "drive": true,
           "drive_reason": "This is the one channel on this board with a tachometer that answers, and a duty written to it demonstrably moves that fan.",
           "floor": null,
@@ -180,6 +189,52 @@
         "ncthwm_query_fan_speed() takes no lock at all - there is no mutex in struct ncthwm_softc (D). Two sysctl readers already race each other inside the kernel, and a userland sequence through /dev/io races the kernel with nothing to serialise against. Everything this plugin does is shaped by that: quantised duties so most cycles write nothing at all, one write per change, a read-back after every write which gives hardware control back when it does not agree - and, in probe.py, a second read of every setting before any of them is believed."
       ]
     },
+    "sophos-xgs-3300": {
+      "display": "Sophos XGS 3300",
+      "match": {
+        "maker": "^Sophos$",
+        "product": "^XGS$",
+        "version": "^(17|3300r1)$"
+      },
+      "verify": {
+        "channels": [
+          "FAN0",
+          "FAN1"
+        ]
+      },
+      "control": false,
+      "control_reason": "This board keeps its own fan curve. Its two fans are read as tachometers through the CPLD over the host's SMBus (os-xgs-npu's sensor tool, measured 2026-10-13: 6,600 to 7,200 rpm), and that face has no duty register - the vendor's own library reads speeds and clears a flag and writes nothing else. Watched, never driven, and nothing here can change that.",
+      "fans": [
+        {
+          "channel": "FAN0",
+          "label": "fan 0",
+          "sensors": [
+            "npu",
+            "cpu",
+            "inlet"
+          ],
+          "drive": false,
+          "drive_reason": "no duty register on this board's CPLD face; a tachometer only",
+          "floor": null,
+          "floor_source": "not applicable: not driven",
+          "tach": "turning"
+        },
+        {
+          "channel": "FAN1",
+          "label": "fan 1",
+          "sensors": [
+            "npu",
+            "cpu",
+            "inlet"
+          ],
+          "drive": false,
+          "drive_reason": "no duty register on this board's CPLD face; a tachometer only",
+          "floor": null,
+          "floor_source": "not applicable: not driven",
+          "tach": "turning"
+        }
+      ]
+    },
     "sophos-xg-family": {
       "display": "Sophos XG / XGS (model not measured)",
       "comment": [
@@ -228,7 +283,15 @@
       "verify": {
         "chip": "^NCT6796D$",
         "hwm_base": "0x290",
-        "channels": ["SYSFAN", "CPUFAN", "AUXFAN0", "AUXFAN1", "AUXFAN2", "FAN6", "FAN7"]
+        "channels": [
+          "SYSFAN",
+          "CPUFAN",
+          "AUXFAN0",
+          "AUXFAN1",
+          "AUXFAN2",
+          "FAN6",
+          "FAN7"
+        ]
       },
       "control": true,
       "control_reason": "Invented. In a real entry this sentence says who watched this model and what they saw.",
@@ -236,7 +299,9 @@
         {
           "channel": "CPUFAN",
           "label": "processor fan, centre of the board",
-          "sensors": ["cpu"],
+          "sensors": [
+            "cpu"
+          ],
           "drive": true,
           "drive_reason": "Identified by a response test and measured to a floor.",
           "floor": 35,
@@ -255,7 +320,10 @@
         {
           "channel": "SYSFAN",
           "label": "chassis fan, left",
-          "sensors": ["cpu", "pch"],
+          "sensors": [
+            "cpu",
+            "pch"
+          ],
           "drive": false,
           "drive_reason": "Invented, and it is the interesting half of this example: this channel HAS a turning fan and a response test moved it, but the floor test stopped the fan at every duty it was tried at and no duty has yet been seen to keep it turning. A channel can be fully identified and still not be drivable, and this is what that looks like.",
           "floor": null,
