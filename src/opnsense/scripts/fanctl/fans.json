@@ -262,7 +262,8 @@
           "label": "the fan",
           "sensors": [
             "cpu",
-            "board"
+            "board",
+            "npu"
           ],
           "drive": false,
           "drive_reason": "not exercised on this board: the response and floor tests have not been run; watched as a tachometer",

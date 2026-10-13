@@ -1470,6 +1470,81 @@ def read_cpld():
     return entries
 
 
+NPU_LINK = '/usr/local/opnsense/scripts/npuctl/mgmt-link.sh'
+# One line run on the coprocessor over the management link: every thermal zone of its own
+# Linux as "zone <type> <millidegrees>", then the temperature of the PHY behind every copper
+# label as "phy <label> <millidegrees>" (xgs-phy-temperature prints "phyN temperatures T 0").
+NPU_PROBE = ('for z in /sys/class/thermal/thermal_zone*; do echo zone $(cat $z/type) $(cat $z/temp); done; '
+             'for l in 1 2 3 4 5 6 7 8 9 10 11 12; do '
+             'echo phy $l $(xgs-phy-temperature -l $l 2>/dev/null | awk \'{print $3}\'); done')
+NPU_CACHE_SECONDS = 60
+_npu_cache = {'at': 0.0, 'entries': []}
+
+
+def read_npu():
+    """The coprocessor's own temperatures, on the appliance that has a management link to it.
+
+    On the Sophos XGS 136 the coprocessor (an ARMADA CN9131) runs its own Linux, and that
+    Linux reports its thermal zones - the SoC sensor, the four application cores, the two
+    communication-processor dies - and, through the vendor's xgs-phy-temperature, the PHY
+    behind every copper port. None of it is reachable from a FreeBSD driver; all of it is one
+    ssh away once os-xgs-npu has given the management link its place (that project's
+    mgmt-link.sh). This asks over that link, caches for a minute because the twelve PHY
+    readings are twelve MDIO transactions on the far side, and returns entries in the shape
+    every other source here uses.
+
+    No link script, no link, a link that does not answer: an empty list, and nothing else in
+    this file notices. Nothing here is written to the hardware.
+    """
+    now = time.time()
+    if now - _npu_cache['at'] < NPU_CACHE_SECONDS:
+        return list(_npu_cache['entries'])
+    _npu_cache['at'] = now
+    _npu_cache['entries'] = []
+    if not os.access(NPU_LINK, os.X_OK) or not _run(['/sbin/ifconfig', 'mvmgmt0'], timeout=5):
+        return []
+    raw = _run(['/bin/sh', NPU_LINK, 'ssh', NPU_PROBE], timeout=25)
+    entries = []
+    for line in raw.splitlines():
+        parts = line.split()
+        if len(parts) != 3 or not re.match(r'^-?[0-9]+$', parts[2]):
+            continue
+        celsius = int(parts[2]) / 1000.0
+        if parts[0] == 'zone':
+            zone = parts[1]
+            if zone == 'ap-thermal-ic':
+                label, kind, limit = 'NPU, the SoC sensor', 'npu_die', 100.0
+            elif zone.startswith('ap-thermal-cpu'):
+                label, kind, limit = 'NPU core %s' % zone[len('ap-thermal-cpu'):], 'npu_core', 100.0
+            elif zone.endswith('.thermal'):
+                label, kind, limit = 'NPU CP die at %s' % zone[:-len('.thermal')], 'npu_die', 100.0
+            else:
+                label, kind, limit = 'NPU %s' % zone, 'npu_other', 100.0
+            key, group, attached = 'zone:%s' % zone, 'npu', 'coprocessor_die'
+        elif parts[0] == 'phy':
+            label, kind, limit = 'PHY behind label %s' % parts[1], 'phy', 105.0
+            key, group, attached = 'phy:%s' % parts[1], 'nic', 'port_phy'
+        else:
+            continue
+        entries.append({
+            'key': 'npu:%s' % key,
+            'name': 'npu.%s' % key,
+            'label': label,
+            'group': group,
+            'kind': kind,
+            'source': 'npu',
+            'celsius': celsius,
+            'raw': '%s' % parts[2],
+            'units': 'C',
+            'limit_c': limit,
+            'headroom_c': limit - celsius,
+            'attached': attached,
+            'named_by_driver': True,
+        })
+    _npu_cache['entries'] = entries
+    return list(entries)
+
+
 def read(catalogue=None, include_drives=False, include_superio=False,
          tracker=None):
     """Every temperature this machine reports, grouped, named and rated.
@@ -1589,6 +1664,8 @@ def read(catalogue=None, include_drives=False, include_superio=False,
 
     for entry in read_cpld():
         sensors.append(entry)
+    for entry in read_npu():
+        sensors.append(entry)
 
     # Confidence, last, because it is the only part that needs history.
     at = time.time()
@@ -1638,6 +1715,7 @@ def read(catalogue=None, include_drives=False, include_superio=False,
             'smartctl': sum(1 for s in sensors if s['source'] == 'smartctl'),
             'superio': sum(1 for s in sensors if s['source'] == 'superio'),
             'cpld': sum(1 for s in sensors if s['source'] == 'cpld'),
+            'npu': sum(1 for s in sensors if s['source'] == 'npu'),
         },
     }
 
