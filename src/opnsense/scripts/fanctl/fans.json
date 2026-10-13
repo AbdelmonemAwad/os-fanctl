@@ -235,6 +235,43 @@
         }
       ]
     },
+    "sophos-xgs-136": {
+      "display": "Sophos XGS 136",
+      "match": {
+        "maker": "^Sophos$",
+        "product": "^XGS$",
+        "version": "^(08|136r1)$",
+        "serial": "AMDA0201"
+      },
+      "verify": {
+        "chip": "^NCT6779D$",
+        "hwm_base": "0xa30",
+        "channels": [
+          "SYSFAN",
+          "CPUFAN",
+          "AUXFAN0",
+          "AUXFAN1",
+          "AUXFAN2"
+        ]
+      },
+      "control": false,
+      "control_reason": "Read only so far. The board has one fan, on the NCT6779D's CPUFAN header, measured 2026-10-13 at 4,981 rpm under the chip's own SmartFan IV curve at 40 percent; the other four headers report no fan. The response and floor tests have not been run on this board, so nothing is driven.",
+      "fans": [
+        {
+          "channel": "CPUFAN",
+          "label": "the fan",
+          "sensors": [
+            "cpu",
+            "board"
+          ],
+          "drive": false,
+          "drive_reason": "not exercised on this board: the response and floor tests have not been run; watched as a tachometer",
+          "floor": null,
+          "floor_source": "not measured",
+          "tach": "turning"
+        }
+      ]
+    },
     "sophos-xg-family": {
       "display": "Sophos XG / XGS (model not measured)",
       "comment": [
