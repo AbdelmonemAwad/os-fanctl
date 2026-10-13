@@ -2023,6 +2023,12 @@ def hardware_rpm(hardware, name, found):
                 rpm = hardware.read(name).get('tach')
             return None if rpm is None else int(rpm)
         except Refused:
+            # The super-I/O path refused, as it does on a machine with none. The board's own
+            # tachometers, when observe() took them from the CPLD, are the reading that is
+            # there; a refusal elsewhere stays a refusal.
+            if (found.get('source') or '') == 'cpld':
+                rpm = cpld_tach().get(name, (found.get('tach') or {}).get(name))
+                return None if rpm is None else int(rpm)
             return None
     return sysctl_tach().get(name, (found.get('tach') or {}).get(name))
 
