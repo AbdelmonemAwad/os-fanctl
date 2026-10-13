@@ -161,7 +161,7 @@ import time
 #   other  a temperature this file found and could not classify. It is shown,
 #          because a reading nobody has named is still a reading, and it is
 #          never a default curve input.
-GROUPS = ('cpu', 'pch', 'acpi', 'nvme', 'drive', 'board', 'nic', 'dimm', 'other')
+GROUPS = ('cpu', 'pch', 'acpi', 'nvme', 'drive', 'board', 'nic', 'dimm', 'npu', 'inlet', 'other')
 
 # How sure this file is about each sensor. These are keys, not sentences; the
 # page owns the words. Declared here, like GROUPS, so that the page and the
@@ -1414,6 +1414,62 @@ def read_ipmi():
 # --------------------------------------------------------------------------
 # Reading
 
+CPLD_TOOL = '/usr/local/sbin/xgs3300-sensors'
+
+
+def read_cpld():
+    """The appliance's own sensor bank, where the board has one the host can reach.
+
+    On the Sophos XGS 3300 the temperatures and fans are registers on a CPLD behind
+    an SMBus face at slave 0x60 on the host's main SMBus controller, and the tool
+    os-xgs-npu installs reads them with the vendor's own transaction and arithmetic
+    (hi + lo / 8 for a temperature, a fan byte in units of 300 rpm). This asks that
+    tool for its one-line JSON and returns entries in the shape every other source
+    here uses, so the page renders one table and decide() can use the groups.
+
+    Three readings: the CPU as the board sees it (beside amdtemp's die reading, and
+    usually a few degrees apart), the NPU - the OCTEON TX coprocessor, the hottest
+    thing in the box and the one no kernel driver reports - and the inlet air.
+    The fans come back as tachometers through fanctl.cpld_tach(), not as sensors.
+
+    Absent tool, absent board, or a tool that failed: an empty list, and nothing
+    else in this file notices. Nothing here is written to the hardware.
+    """
+    entries = []
+    if not os.access(CPLD_TOOL, os.X_OK):
+        return entries
+    raw = _run([CPLD_TOOL, 'json'], timeout=10)
+    if not raw:
+        return entries
+    try:
+        values = json.loads(raw.strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        return entries
+    for key, label, group, kind, attached, limit in (
+            ('cpu_c', 'CPU, as the board reads it', 'cpu', 'cpu_board', 'cpu_die', 95.0),
+            ('npu_c', 'NPU (the coprocessor die)', 'npu', 'npu_die', 'coprocessor_die', 100.0),
+            ('inlet_c', 'inlet air', 'inlet', 'ambient', 'chassis_inlet', 45.0)):
+        celsius = values.get(key)
+        if not isinstance(celsius, (int, float)):
+            continue
+        entries.append({
+            'key': 'cpld:%s' % key,
+            'name': 'cpld.%s' % key,
+            'label': label,
+            'group': group,
+            'kind': kind,
+            'source': 'cpld',
+            'celsius': float(celsius),
+            'raw': '%.3fC' % celsius,
+            'units': 'C',
+            'limit_c': limit,
+            'headroom_c': limit - float(celsius),
+            'attached': attached,
+            'named_by_driver': True,
+        })
+    return entries
+
+
 def read(catalogue=None, include_drives=False, include_superio=False,
          tracker=None):
     """Every temperature this machine reports, grouped, named and rated.
@@ -1531,6 +1587,9 @@ def read(catalogue=None, include_drives=False, include_superio=False,
                 unreadable_why.append({'name': entry['name'],
                                        'why': entry.get('unreadable', 'absent')})
 
+    for entry in read_cpld():
+        sensors.append(entry)
+
     # Confidence, last, because it is the only part that needs history.
     at = time.time()
     if tracker is not None:
@@ -1578,6 +1637,7 @@ def read(catalogue=None, include_drives=False, include_superio=False,
             'sysctl': sum(1 for s in sensors if s['source'] == 'sysctl'),
             'smartctl': sum(1 for s in sensors if s['source'] == 'smartctl'),
             'superio': sum(1 for s in sensors if s['source'] == 'superio'),
+            'cpld': sum(1 for s in sensors if s['source'] == 'cpld'),
         },
     }
 
