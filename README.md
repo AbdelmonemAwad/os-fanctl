@@ -28,7 +28,12 @@ Everything else comes from primary sources and is marked where it matters.
   nothing else, built on the firewall by the firewall's own compiler.
 - **Reads every temperature the machine will give up**, by asking the kernel which of its
   thousands of sysctl nodes are declared as temperatures rather than by carrying a list of driver
-  names — so it finds the sensors on hardware nobody has ever tested it on.
+  names — so it finds the sensors on hardware nobody has ever tested it on. On the Sophos XGS
+  3300 it also reads the board's own sensor bank - the CPU as the board sees it, the NPU
+  (the coprocessor die, which no kernel driver reports) and the inlet air, and both fans as
+  tachometers - through the small tool [os-xgs-npu](https://github.com/AbdelmonemAwad/os-xgs-npu)
+  installs, which reaches the CPLD over the host's SMBus; watched, not driven, because that
+  board's fan curve has no register the host can write.
 - **Keeps a record**, once a minute, of every sensor and every fan: the lowest, the highest and
   the time-weighted mean over the last hour, day, week and month, and how long each sensor spent
   above each rung of a fixed ladder. One sample costs 1.4 ms and the whole record is bounded at
@@ -109,13 +114,17 @@ over, which is every channel on any board whose firmware set one.
 sh install/install.sh
 ```
 
-Idempotent: re-run it after an update. Your settings are kept, the boot switch is kept, and so
+Idempotent: re-run it after an update. Your settings are kept, and so
 are the floor measurements in `/var/db/fanctl` — which matter more than either, because they are
 the only numbers in this plugin that came from hardware rather than from a keyboard.
 
 The page is at **System → Fan Control**. The dashboard panel is under **Add widget → Fan
 Control**. Nothing is controlling a fan when the installer finishes, and nothing will until you
-say so on that page.
+say so on that page. Once you have, it comes back at every boot: OPNsense starts it from its own
+boot sequence (`plugins_configure('bootup')`), which is where a plugin's daemons are started - the
+first version left a switch in `/usr/local/etc/rc.conf.d` that nothing on an OPNsense boot reads,
+measured on two appliances, and a fan controller that is not running after a reboot is the one
+failure this plugin exists not to have.
 
 ## Putting it on an appliance it has never seen
 

@@ -822,6 +822,26 @@ class Hardware(object):
 _NCTHWM = re.compile(r'^dev\.(ncthwm|aibs)\.\d+\.([A-Za-z0-9_]+):?\s*(-?\d+)')
 
 
+def cpld_tach():
+    """Tachometers from the appliance's CPLD, as {channel: rpm}, where os-xgs-npu's
+    sensor tool is installed and the board has the bank (the XGS 3300). Read-only,
+    like everything that tool does; an absent tool or a failed read is {}.
+    """
+    tool = '/usr/local/sbin/xgs3300-sensors'
+    if not os.access(tool, os.X_OK):
+        return {}
+    try:
+        done = subprocess.run([tool, 'json'], capture_output=True, text=True, timeout=10)
+        values = json.loads(done.stdout.strip().splitlines()[-1])
+    except (OSError, subprocess.SubprocessError, ValueError, IndexError):
+        return {}
+    found = {}
+    for key, name in (('fan0_rpm', 'FAN0'), ('fan1_rpm', 'FAN1')):
+        if isinstance(values.get(key), int):
+            found[name] = values[key]
+    return found
+
+
 def sysctl_tach():
     """Tachometers the kernel already publishes, as {channel: rpm}.
 
@@ -1207,6 +1227,25 @@ def observe(hardware, entry):
             found['detail'] = ('read through the kernel driver, which publishes tachometers and '
                                'nothing else: no duty, no control law, and no way to set '
                                'anything.')
+
+    if not found.get('channels'):
+        # No super-I/O channel on this machine, whichever path was asked. The appliance's own
+        # fan bank, read through the board's CPLD by the tool os-xgs-npu installs, is the last
+        # place to look: real tachometers, watched and never driven, on the XGS 3300.
+        tach = cpld_tach()
+        if tach:
+            found['source'] = 'cpld'
+            found['access'] = 'cpld'
+            found['tach'] = tach
+            found['channels'] = [{'name': name, 'number': None, 'tach': rpm, 'duty': None,
+                                  'output': None, 'mode': None, 'mode_name': None,
+                                  'helper_floor': None, 'helper_floor_source': None,
+                                  'saved': None}
+                                 for name, rpm in sorted(tach.items())]
+            found['detail'] = ('the fans as the board reads them, through the CPLD over the '
+                               'host SMBus: tachometers and nothing else, no duty and no way '
+                               'to set anything - this board keeps its own fan curve.')
+            found['problem'] = ''
 
     # What the table says about each channel, joined on here so that everything
     # downstream - the page, the contract, the daemon - reads one list.
