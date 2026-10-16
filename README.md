@@ -144,6 +144,14 @@ rules, the record and its arithmetic, and a section on what is deliberately unse
 it are marked **V** (verified on the reference machine), **D** (documented in a primary source,
 quoted) or **R** (reported). Nothing unmarked is a fact.
 
+## In the XGS image
+
+[xgs-image-builder](https://github.com/AbdelmonemAwad/xgs-image-builder) builds an OPNsense image
+for Sophos XGS appliances with this repository in it, installed at the image's first boot. It holds
+no copy of this repository: every build takes `main` as it is that day, so a change merged here is
+in the next image without anything being done there. What the image calls here - `install/install.sh` and `install/enable.sh` - is checked
+from that side every day, so moving or renaming one of them is caught there; keep them where they are.
+
 ## Licence
 
 BSD 2-Clause. Copyright (C) 2026 Abdelmonem Awad.

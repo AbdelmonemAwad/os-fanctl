@@ -292,7 +292,7 @@ is the copy with a fan behind it.
 
 ```
 Makefile, pkg-descr, README.md, DESIGN.md
-install/{install.sh,uninstall.sh}
+install/{install.sh,uninstall.sh,enable.sh}
 pkg/{post-install.sh,pre-deinstall.sh,post-deinstall.sh}
 docs/contributing-fans.md
 src/etc/rc.d/fanctl                          the service
