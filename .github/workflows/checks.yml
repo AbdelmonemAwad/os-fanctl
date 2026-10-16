@@ -104,6 +104,12 @@ jobs:
             sh -n "$f" && echo "ok $f"
           done
 
+      # The installer copies src/ whole and the uninstaller names what it removes, so a file added
+      # to src/ is left behind on removal unless somebody remembers. A plugins.inc.d hook left
+      # behind stops OPNsense's boot before the network (os-frontpanel issue 11, an XGS 136).
+      - name: The uninstaller removes everything the installer lays down
+        run: sh tools/check-uninstall.sh .
+
   privacy:
     name: nothing private
     runs-on: ubuntu-latest
