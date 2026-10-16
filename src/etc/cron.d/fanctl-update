@@ -1,0 +1,7 @@
+# The daily self-update of os-fanctl: the latest release on GitHub, taken only when it is ahead
+# of what is installed. See /usr/local/opnsense/scripts/fanctl/self-update.py.
+#
+# Once a day, at a minute of its own so that no two of these plugins install at the same time:
+# each install restarts configd and the web GUI. Output to /dev/null; what happened is in the
+# system log and in /usr/local/share/os-fanctl/update.json.
+23	3	*	*	*	root	/usr/local/opnsense/scripts/fanctl/self-update.py > /dev/null 2>&1

@@ -40,6 +40,7 @@ find /usr/local/opnsense/scripts/fanctl -type f -name '*.py' -exec chmod 755 {} 
 find /usr/local/opnsense/scripts/fanctl -type f ! -name '*.py' ! -name 'fanctl-io'     -exec chmod 644 {} +
 chmod 755 /usr/local/etc/rc.d/fanctl
 chmod 644 /usr/local/etc/newsyslog.conf.d/fanctl
+chmod 644 /usr/local/etc/cron.d/fanctl-update
 chmod 644 /usr/local/opnsense/service/conf/actions.d/actions_fanctl.conf
 
 # The dashboard widget. Core globs the Metadata directory for *.xml and takes the element
@@ -171,6 +172,22 @@ if [ -x /usr/local/opnsense/scripts/fanctl/merge_ui_translations.py ]; then
     echo "translated strings added: $(/usr/local/opnsense/scripts/fanctl/merge_ui_translations.py)"
 fi
 configctl webgui restart > /dev/null 2>&1 || true
+
+# What this install is, for the daily self-update: the commit, from a git checkout, or from the
+# .source-commit stamp that an xgs-image-builder image or the self-update leaves in the tree.
+# Without either it is recorded as unknown, and the self-update takes the latest release once.
+REV=; RDATE=; RSRC=unknown
+if [ -e "${HERE}/.git" ] && REV=$(git -C "${HERE}" rev-parse HEAD 2>/dev/null); then
+    RDATE=$(git -C "${HERE}" log -1 --format=%cI 2>/dev/null); RSRC=git
+elif [ -s "${HERE}/.source-commit" ]; then
+    read -r REV RDATE _ < "${HERE}/.source-commit"; RSRC=stamp
+else
+    REV=
+fi
+case ${REV} in *[!0-9a-f]*) REV=; RDATE=; RSRC=unknown ;; esac
+install -d -m 0755 /usr/local/share/os-fanctl
+printf '{"commit": "%s", "date": "%s", "source": "%s", "installed_at": %s}\n' \
+    "${REV}" "${RDATE}" "${RSRC}" "$(date +%s)" > /usr/local/share/os-fanctl/installed.json
 
 echo "Fan Control installed: the page is at System > Fan Control"
 echo "the widget is at Lobby > Dashboard, under Add widget > Fan Control"

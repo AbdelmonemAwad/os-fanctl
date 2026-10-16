@@ -152,6 +152,29 @@ no copy of this repository: every build takes `main` as it is that day, so a cha
 in the next image without anything being done there. What the image calls here - `install/install.sh` and `install/enable.sh` - is checked
 from that side every day, so moving or renaming one of them is caught there; keep them where they are.
 
+## Updates
+
+An installed copy follows this repository's **releases** by itself: once a day, at 03:23,
+`/usr/local/opnsense/scripts/fanctl/self-update.py` (from `/usr/local/etc/cron.d/fanctl-update`) asks GitHub for the latest release and, when it is ahead of what
+is installed, downloads it and runs the `install/install.sh` it carries - the same script a hand install
+runs. A change merged on `main` reaches installed firewalls when it is released, not before; with
+no release published, nothing changes.
+
+- **Only forward.** What is installed is recorded in `/usr/local/share/os-fanctl/installed.json` by
+  the installer - the commit, from a git checkout or from the `.source-commit` stamp that an
+  xgs-image-builder image or an update leaves in the tree. A firewall running something newer than
+  the release is not taken back; an install from before the stamp existed takes the latest release
+  once.
+- **What happened** is in the system log as `self-update`, in
+  `/usr/local/share/os-fanctl/update.json`, and the installer's output in `update.log` beside it.
+- `/usr/local/opnsense/scripts/fanctl/self-update.py check` says what it would do and changes nothing.
+- An update leaves a running controller on the code it started with, as a hand install does;
+  it takes the new code at its next start.
+
+Tested in a QEMU virtual machine against a stand-in for GitHub (no release had been published):
+a release ahead is installed, one that is not is left, no release and an unreachable GitHub change
+nothing, and the uninstaller removes the updater, its cron entry and the stamp.
+
 ## Licence
 
 BSD 2-Clause. Copyright (C) 2026 Abdelmonem Awad.
