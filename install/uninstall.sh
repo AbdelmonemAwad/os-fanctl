@@ -24,6 +24,12 @@ if [ -x /usr/local/opnsense/scripts/fanctl/fanctl.py ]; then
              "and on to return them to firmware control"
 fi
 
+# The plugin hook first, before anything it calls: OPNsense loads every file in plugins.inc.d
+# and calls its hooks at boot, and one left behind without the plugin's classes is a fatal error
+# that stops rc.bootup before the network - which is what os-frontpanel's did on an XGS 136. The
+# cron entry with it, which would otherwise go on calling a script that is no longer there.
+rm -f /usr/local/etc/inc/plugins.inc.d/fanctl.inc
+rm -f /usr/local/etc/cron.d/fanctl
 rm -f /usr/local/etc/rc.d/fanctl
 rm -f /usr/local/etc/newsyslog.conf.d/fanctl
 # The port helper and, if this tree was unpacked as-is, its source beside it. The binary goes
