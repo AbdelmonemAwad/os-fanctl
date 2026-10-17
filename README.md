@@ -152,6 +152,17 @@ no copy of this repository: every build takes `main` as it is that day, so a cha
 in the next image without anything being done there. What the image calls here - `install/install.sh` and `install/enable.sh` - is checked
 from that side every day, so moving or renaming one of them is caught there; keep them where they are.
 
+## In Arabic
+
+Every string the page and the dashboard widget show - 228 on 2026-10-17, of which OPNsense's own
+Arabic catalogue covered 15 before - is in `src/opnsense/scripts/fanctl/i18n/ui/ar_SA.json`, with
+the list of strings in `source.json` beside it. They are merged into the catalogue of each installed
+GUI language the way os-linkhealth merges its own: by the installer and the package, again at every
+boot (`rc.syshook.d/start/64-fanctl-i18n`), and by pkg whenever a package writes a catalogue
+(`src/share/pkg/triggers/os-fanctl.ucl`). A string the catalogue already translates keeps core's
+words. `tools/check-strings.py`, run by the checks, fails when the page or the widget gains a string
+that is not in the catalogue or has no Arabic.
+
 ## Updates
 
 An installed copy follows this repository's **releases** by itself: once a day, at 03:23,

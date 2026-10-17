@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright (c) 2026 Abdelmonem Awad <eg2@live.com>
+#
+# A package that writes a GUI catalogue - /usr/local/share/locale/*/LC_MESSAGES/OPNsense.mo -
+# drops the Fan Control strings merged into it, and an update that only installs packages
+# does not reboot, so the boot hook (64-fanctl-i18n) alone would leave the page in English until the
+# next boot. pkg runs this the moment such a package is written. pkg matches a trigger against the
+# DIRECTORIES a package writes into, not its files, so it names the directory; what it runs only
+# adds what is missing. It does not restart the web GUI: an update does that itself when pkg is
+# done, and a restart in the middle would cut the firmware page off from the update it shows.
+path_glob: [ "/usr/local/share/locale/*/LC_MESSAGES" ]
+trigger: {
+	type: lua
+	sandbox: false
+	script: <<EOS
+pkg.exec({"/bin/sh", "-c", "[ -f /usr/local/opnsense/scripts/fanctl/merge_ui_translations.py ] && /usr/local/bin/python3 /usr/local/opnsense/scripts/fanctl/merge_ui_translations.py > /dev/null; exit 0"})
+EOS
+}
