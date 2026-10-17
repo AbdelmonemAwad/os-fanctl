@@ -42,6 +42,10 @@
         state_*     A channel reading zero is not a stopped fan. It may be a header with no fan on
                     it, or a fan whose tachometer is not wired to this chip, and nothing in
                     software can tell those apart - so the word "stopped" is never used about one.
+
+        cores       The processor's cores as one line, the hottest of them, with their count: on
+                    these machines every core reads the same, and one bar per core made this the
+                    tallest widget on the dashboard.
     -->
     <fanctl>
         <filename>FanCtl.js</filename>
@@ -65,6 +69,7 @@
             <over_limit>At or above the limit, where the fans go to full speed</over_limit>
             <over_panic>Above the panic point - the plugin hands the fans back here</over_panic>
             <scale>Scale ends at the panic point, %s; the mark is the limit, %s</scale>
+            <cores>processor cores (%s)</cores>
             <nodata>No fan or temperature readings yet.</nodata>
             <stale>The readings are from %s and are no longer being updated.</stale>
             <unreachable>Could not read the fan control status.</unreachable>

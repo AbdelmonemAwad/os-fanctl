@@ -330,6 +330,9 @@
            rows too many - but somebody who has just wired a fan to one of them wants it at once,
            so they are one click away and the summary names them. */
         let show_silent = false;
+        /* The processor's cores, one row until asked for: on most of these machines every core
+           reads the same number, and eight identical bars said nothing the hottest one did not. */
+        let show_cores = false;
 
         /* The incident that has been read. Keyed on the incident itself, so a NEW one appears
            even after an old one was dismissed. */
@@ -596,7 +599,9 @@
                 $body.append($row);
             });
 
-            bind_strip($('#fc-contract-strip'), $body, 'contract', met !== lines.length);
+            /* Closed until opened: the count above says how many hold, and on hardware nobody has
+               measured none of them can - the six explanations every visit was most of the page. */
+            bind_strip($('#fc-contract-strip'), $body, 'contract', false);
         }
 
         /* ------------------------------------------------------------------ one row
@@ -1593,6 +1598,13 @@
 
             const seen_names = {};
             let frozen = 0;
+            /* The cores as one row - the hottest, the list being sorted hottest first - and the
+               rest behind a toggle, where there are enough of them to be worth folding. */
+            const cores = sensors.filter(function (sensor) {
+                return String(sensor.kind) === 'cpu_core' && constant.indexOf(String(sensor.name || '')) === -1;
+            });
+            const fold_cores = cores.length >= 3;
+            let $cores = null;
             sensors.forEach(function (sensor) {
                 const name = String(sensor.name || '');
                 seen_names[name] = true;
@@ -1619,7 +1631,7 @@
                         {headroom: fc_num(sensor.headroom_c),
                          limit: String(sensor.limit_name)}));
                 }
-                temps.body.append(row({
+                const one = {
                     name: String(sensor.label || fc_sensor(name)),
                     id: name,
                     now: sensor.celsius,
@@ -1630,7 +1642,25 @@
                     rungs: rungs,
                     tone: tone_of(band_high),
                     why: why
-                }));
+                };
+                if (fold_cores && String(sensor.kind) === 'cpu_core') {
+                    if ($cores === null) {
+                        temps.body.append(row($.extend({}, one, {
+                            name: "{{ lang._('processor cores') }}" + ' (' + cores.length + ')'
+                        })));
+                        $('<button type="button" class="fc-strip"/>')
+                            .append($('<i class="fa fa-fw"/>').addClass(show_cores ? 'fa-angle-up' : 'fa-angle-down'))
+                            .append(' ')
+                            .append($('<span/>').text(show_cores
+                                ? "{{ lang._('Hide them') }}" : "{{ lang._('Show them') }}"))
+                            .on('click', function () { show_cores = !show_cores; draw_rows(); })
+                            .appendTo(temps.body);
+                        $cores = $('<div class="fc-cores"/>').toggle(show_cores).appendTo(temps.body);
+                    }
+                    $cores.append(row(one));
+                    return;
+                }
+                temps.body.append(row(one));
             });
 
             /* In the record and no longer on the machine. The band is real and the reading now
@@ -2372,6 +2402,9 @@
     .fc-row {
         padding: 6px 0 10px;
         border-bottom: 1px solid rgba(128, 128, 128, 0.22);
+        /* A bar as wide as a 1920-pixel screen is a thread; this keeps a reading and its band
+           in one glance on a wide screen and changes nothing on a narrow one. */
+        max-width: 980px;
     }
 
     .fc-row-head {
@@ -2573,7 +2606,8 @@
         letter-spacing: 0.06em;
         opacity: 0.7;
     }
-    .fc-vital-value { font-size: 22px; line-height: 1.25; font-weight: bold; }
+    .fc-vital-value { font-size: 18px; line-height: 1.3; font-weight: 600; font-family: inherit; }
+    .fc-vital-value .label { font-size: 12px; font-weight: 600; }
     .fc-vital-sub { font-size: 85%; opacity: 0.8; }
     .fc-vital-acts {
         margin-inline-start: auto;

@@ -226,5 +226,6 @@
  "Scale ends at the panic point, %s; the mark is the limit, %s",
  "No fan or temperature readings yet.",
  "The readings are from %s and are no longer being updated.",
- "Could not read the fan control status."
+ "Could not read the fan control status.",
+ "processor cores (%s)"
 ]
