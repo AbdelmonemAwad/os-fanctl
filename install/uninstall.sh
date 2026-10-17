@@ -57,6 +57,8 @@ rm -rf /usr/local/opnsense/mvc/app/views/OPNsense/FanCtl
 # key, which is what it already does for a widget the user never had.
 rm -f /usr/local/opnsense/www/js/widgets/FanCtl.js
 rm -f /usr/local/opnsense/www/js/widgets/Metadata/FanCtl.xml
+rm -f /usr/local/etc/rc.syshook.d/start/64-fanctl-i18n
+rm -f /usr/local/share/pkg/triggers/os-fanctl.ucl
 
 # The pidfiles of a service that has just been stopped, in case it had to be killed and
 # daemon(8) never got round to removing them itself. The chip lock goes with them: it is an

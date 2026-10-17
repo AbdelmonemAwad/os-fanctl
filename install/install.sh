@@ -50,6 +50,9 @@ chmod 644 /usr/local/opnsense/service/conf/actions.d/actions_fanctl.conf
 # installed.
 chmod 644 /usr/local/opnsense/www/js/widgets/FanCtl.js
 chmod 644 /usr/local/opnsense/www/js/widgets/Metadata/FanCtl.xml
+# The Arabic merge at every boot, and the pkg trigger that runs it when a catalogue is written.
+chmod 755 /usr/local/etc/rc.syshook.d/start/64-fanctl-i18n
+chmod 644 /usr/local/share/pkg/triggers/os-fanctl.ucl
 
 # The controller's log. 0750 because what it logs is what it did to the fans and what the
 # chip answered back, which is diagnostic detail about the hardware.

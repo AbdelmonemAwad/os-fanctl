@@ -60,6 +60,24 @@ if ! install -d -o root -g wheel -m 0750 /var/db/fanctl; then
 	echo "because it has nowhere to record what it would have to put back"
 fi
 
+# The page's and the widget's strings, merged into every installed GUI language's catalogue -
+# the same merge os-linkhealth runs, from this plugin's own copy. A failure is reported as one and
+# not as "0 added", and the next boot (64-fanctl-i18n) runs the same merge again.
+if [ -x /usr/local/opnsense/scripts/fanctl/merge_ui_translations.py ]; then
+	ADDED=$(/usr/local/opnsense/scripts/fanctl/merge_ui_translations.py)
+	STATUS=$?
+	if [ "${STATUS}" -eq 0 ]; then
+		echo "translated strings added: ${ADDED:-0}"
+	else
+		echo "the GUI strings were not merged (exit ${STATUS}); the next boot runs the same merge"
+	fi
+	if [ -n "${ADDED}" ] && [ "${ADDED}" != "0" ]; then
+		echo "restarting the web GUI so that it reads the strings just added"
+		[ -f /usr/local/sbin/configctl ] &&
+		    /usr/local/sbin/configctl webgui restart > /dev/null 2>&1 || true
+	fi
+fi
+
 if [ -f /usr/local/opnsense/mvc/script/run_migrations.php ]; then
 	/usr/local/opnsense/mvc/script/run_migrations.php OPNsense/FanCtl
 fi

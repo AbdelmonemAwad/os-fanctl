@@ -131,10 +131,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # This plugin has no catalogue yet - every string on its page is English. These steps
-      # are here rather than added later because the day the catalogue arrives is the day
-      # somebody will forget to check it, and a step that says "not this plugin" until then
-      # costs four seconds and no attention.
+      # The catalogue arrived on 2026-10-17: every string the page and the widget show, with its
+      # Arabic, in src/opnsense/scripts/fanctl/i18n/ui. These steps were here before it, so that
+      # the day it arrived was not the day somebody forgot to check it.
       - name: The generated data-string map is current
         run: |
           [ -f tools/gen-data-strings.py ] || { echo "not this plugin"; exit 0; }

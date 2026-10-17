@@ -1,0 +1,18 @@
+#!/bin/sh
+#-
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright (c) 2026 Abdelmonem Awad <eg2@live.com>
+#
+# Put the Fan Control strings back into the GUI's catalogues at every boot: a catalogue written
+# again - by an update of the language package that carries it - loses what was merged into it.
+# Numbered after 59-opnsense-arabic, which puts the Arabic catalogue itself back. The merge adds
+# only what a catalogue does not hold, so it is harmless when nothing was lost.
+
+M=/usr/local/opnsense/scripts/fanctl/merge_ui_translations.py
+[ -x "${M}" ] || exit 0
+ADDED=$(/usr/local/bin/python3 "${M}" 2> /dev/null)
+if [ -n "${ADDED}" ] && [ "${ADDED}" != "0" ]; then
+	# running php processes keep the old catalogue in memory
+	/usr/local/sbin/configctl webgui restart > /dev/null 2>&1
+fi
+exit 0
