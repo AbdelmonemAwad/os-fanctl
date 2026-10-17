@@ -145,6 +145,32 @@
             return $('<div/>').addClass('fc-note ' + (classname || '')).text(text);
         }
 
+        /* The Hardware tab's long explanations sit under "full help", as the settings tab's do,
+           and one drawn after the switch was turned is drawn in the state it was turned to. */
+        let help_on = false;
+
+        function help_note(text) {
+            return $('<div class="help-block fc-help"/>').text(text).toggle(help_on);
+        }
+
+        $('.fc-help-toggle').click(function (event) {
+            event.preventDefault();
+            help_on = !help_on;
+            $('.fc-help-toggle > i')
+                .toggleClass('fa-toggle-on text-success', help_on)
+                .toggleClass('fa-toggle-off text-danger', !help_on);
+            $('.fc-help').toggle(help_on);
+        });
+
+        /* one row of a Hardware section: what is read on the left, the reading on the right */
+        function hw_row(title, $value) {
+            return $('<tr/>').append($('<td/>').text(title)).append($('<td/>').append($value));
+        }
+
+        function hw_wide($content) {
+            return $('<tr/>').append($('<td colspan="2"/>').append($content));
+        }
+
         function tech(text) {
             return $('<span class="fc-tech"/>').text(text === null || text === undefined
                 ? '' : String(text));
@@ -802,8 +828,11 @@
             const layer = (probe_doc && is_object(probe_doc.hardware_layer))
                 ? probe_doc.hardware_layer : null;
 
+            $body.append(hw_wide(help_note(
+                "{{ lang._('What was found in this machine, what the shipped table says about it, and the one instrument this plugin has: the floor test. Probing reads and writes nothing.') }}"
+            )));
             if (found === null) {
-                $body.append(note("{{ lang._('Asking the firewall...') }}"));
+                $body.append(hw_wide(note("{{ lang._('Asking the firewall...') }}")));
                 return;
             }
 
@@ -825,25 +854,19 @@
                     found.hard_floor === null || found.hard_floor === undefined
                         ? '' : found.hard_floor + '%']
             ];
-            const $table = $('<table class="table table-condensed fc-detail"/>');
-            const $rows = $('<tbody/>');
             rows.forEach(function (line) {
                 if (line[1] === undefined || line[1] === null || line[1] === '') {
                     return;
                 }
-                $rows.append($('<tr/>')
-                    .append($('<th/>').text(line[0]))
-                    .append($('<td/>').append(tech(line[1]))));
+                $body.append(hw_row(line[0], tech(line[1])));
             });
-            $table.append($rows);
-            $body.append($table);
 
             /* When this probe was taken, against the firewall own clock. A reading twenty
                minutes old was presented exactly like one taken this second until today. */
             const age = doc_age_seconds((probe_doc || {}).at);
             if (age !== null) {
-                $body.append(note(fc_fill("{{ lang._('this probe was taken {age} ago') }}",
-                    {age: age_text(age)})));
+                $body.append(hw_wide(note(fc_fill("{{ lang._('this probe was taken {age} ago') }}",
+                    {age: age_text(age)}), 'fc-muted')));
             }
 
             /* What each channel was found under before this plugin touched it, per channel, from
@@ -852,87 +875,88 @@
                without either being reconciled to the other here. */
             const channels = $.isArray(found.channels) ? found.channels : [];
             if (channels.length) {
-                const $saved = $('<div class="fc-note"/>');
-                $saved.append($('<span/>').text(
-                    "{{ lang._('the baseline for each channel:') }}" + ' '));
+                const $saved = $('<div/>');
                 channels.forEach(function (channel) {
-                    $saved.append(' ').append(chip(
+                    $saved.append(chip(
                         String(channel.name || '') + ' ' + (channel.saved
                             ? "{{ lang._('baseline captured') }}"
                             : "{{ lang._('not recorded') }}"),
-                        channel.saved ? 'text-success' : 'text-muted', ''));
+                        channel.saved ? 'text-success' : 'text-muted', '')).append(' ');
                 });
-                $body.append($saved);
+                $body.append(hw_row("{{ lang._('Baseline per channel') }}", $saved));
             }
 
             if (found.detail) {
-                $body.append(note(String(found.detail)));
+                $body.append(hw_wide(help_note(String(found.detail))));
             }
             /* Channel 1 is the only channel on this family with an output-type bit, and a DC
                channel drives its fan by voltage: a duty on it does not mean what a duty on a
                PWM channel means. Said where somebody is about to measure a floor on it. */
             if (String(found.channel1_output || '') === 'dc') {
-                $body.append(note(
+                $body.append(hw_wide(note(
                     "{{ lang._('Channel 1 is set to DC output, which drives its fan by voltage rather than by a pulse width. A duty on that channel does not mean the same thing as a duty on a PWM channel, and a floor measured on it is a voltage floor.') }}",
-                    'text-warning'));
+                    'text-warning')));
             }
             /* Why the read-only path is in use, in the layer own words. This is the ordinary
                case on a machine where the helper was never built or may not open /dev/io, and
                it is a sentence rather than a blank space. */
             if (is_object(found.unavailable)) {
-                $body.append(note(
+                $body.append(hw_wide(note(
                     "{{ lang._('The helper could not be used, so these readings came from the kernel driver instead:') }}"
                     + ' ' + String(found.unavailable.error || '')
                     + (found.unavailable.slug ? ' (' + String(found.unavailable.slug) + ')' : ''),
-                    'text-warning'));
+                    'text-warning')));
             }
             /* The honest, common answer on hardware nobody has written a layer for: the readings
                are real and the writing is not available. Said plainly, in the script's own words,
                rather than shown as an empty panel. */
             if (found.problem) {
-                $body.append(note(String(found.problem), 'text-warning'));
+                $body.append(hw_wide(note(String(found.problem), 'text-warning')));
             }
             if (layer !== null && layer.present === false) {
-                $body.append(note(
+                $body.append(hw_wide(note(
                     "{{ lang._('Without the hardware layer this plugin reads and reports and can write nothing at all. Everything on the Fans tab is still a real reading.') }}"
-                ));
+                )));
             }
         }
 
         function draw_model() {
             const $body = $('#model-body').empty();
             if (probe_doc === null) {
-                $body.append(note("{{ lang._('Asking the firewall...') }}"));
+                $body.append(hw_wide(note("{{ lang._('Asking the firewall...') }}")));
                 return;
             }
             const machine = is_object(probe_doc.machine) ? probe_doc.machine : {};
             const table = is_object(probe_doc.table) ? probe_doc.table : {};
             const print = is_object(probe_doc.fingerprint) ? probe_doc.fingerprint : {};
 
-            $body.append($('<div class="fc-strong"/>').text(
-                String(machine.display || "{{ lang._('unrecognised appliance') }}")));
-            $body.append($('<div class="fc-note"/>').append(tech(
-                [machine.maker, machine.product, machine.version].filter(function (part) {
+            $body.append(hw_row("{{ lang._('Model') }}", $('<div/>')
+                .append($('<span class="fc-strong"/>').text(
+                    String(machine.display || "{{ lang._('unrecognised appliance') }}")))
+                .append(' ')
+                .append(tech([machine.maker, machine.product, machine.version].filter(function (part) {
                     return part;
-                }).join(' / ') || "{{ lang._('this machine reports no SMBIOS names') }}")));
+                }).join(' / ') || "{{ lang._('this machine reports no SMBIOS names') }}").addClass('fc-muted'))));
 
-            $body.append($('<div class="fc-label"/>').append(
-                table.control
-                    ? label("{{ lang._('the table permits control on this model') }}", 'label-info')
-                    : label("{{ lang._('the table does not permit control on this model') }}",
-                            'label-default')));
+            /* the table's verdict in plain sight; its reasons, which run to a paragraph, under
+               full help */
+            const $control = $('<div/>').append(table.control
+                ? label("{{ lang._('the table permits control on this model') }}", 'label-info')
+                : label("{{ lang._('the table does not permit control on this model') }}",
+                        'label-default'));
             if (table.reason) {
-                $body.append(note(String(table.reason)));
+                $control.append(help_note(String(table.reason)));
             }
             if (table.hint) {
-                $body.append(note(String(table.hint)));
+                $control.append(help_note(String(table.hint)));
             }
+            $body.append(hw_row("{{ lang._('Fan control') }}", $control));
 
             if (print.ok === false) {
                 const complaints = $.isArray(print.complaints) ? print.complaints : [];
-                $body.append(note(
+                $body.append(hw_wide(note(
                     "{{ lang._('The chip in this machine does not match the table entry it was matched to, so nothing will be driven:') }}" +
-                    ' ' + complaints.join(' '), 'text-warning'));
+                    ' ' + complaints.join(' '), 'text-warning')));
             }
 
             /* What the table admits to, printed as it was written - nothing truncated, nothing
@@ -940,9 +964,11 @@
                characters of reference on this model and a reference is not a reading. */
             const notes = $.isArray(table.notes) ? table.notes : [];
             if (notes.length > 0) {
-                strip($body, 'model-notes',
+                const $notes = $('<div/>');
+                strip($notes, 'model-notes',
                     fc_fill("{{ lang._('{n} notes about this model') }}", {n: notes.length}),
                     notes.map(String));
+                $body.append(hw_wide($notes));
             }
         }
 
@@ -978,16 +1004,21 @@
             const channels = (chip && $.isArray(chip.channels)) ? chip.channels : [];
             const floors = (probe_doc && is_object(probe_doc.floors)) ? probe_doc.floors : {};
 
+            $body.append(hw_wide(help_note(
+                "{{ lang._('A floor is the lowest duty at which a fan that is already turning keeps turning, measured on this machine, plus one step. It is not the duty at which a stopped fan starts - that is higher on every fan ever made, and measuring it would mean stopping a fan on a firewall that is in service. Nothing is driven below a floor, and nothing is driven at all on a channel whose floor has never been measured.') }}"
+            )));
             if (running) {
-                $body.append($('<div class="alert alert-info fc-alert" role="alert"/>').text(
-                    "{{ lang._('The service is running and owns the chip, so nothing here can be used. Stop it first: two writers on the same two ports, with nothing to serialise either of them against the kernel driver that reads the same chip without a lock, is exactly the race this plugin is arranged to avoid.') }}"
-                ));
+                $body.append(hw_wide($('<div/>')
+                    .append(note("{{ lang._('The service is running and owns the chip, so nothing here can be used - stop it first.') }}", 'text-info'))
+                    .append(help_note(
+                        "{{ lang._('Two writers on the same two ports, with nothing to serialise either of them against the kernel driver that reads the same chip without a lock, is exactly the race this plugin is arranged to avoid.') }}"
+                    ))));
                 return;
             }
             if (channels.length === 0 || !chip.writable) {
-                $body.append(note(
+                $body.append(hw_wide(note(
                     "{{ lang._('There is no writable path to a fan on this machine, so there is nothing to measure. The panel above says what was found.') }}"
-                ));
+                )));
                 return;
             }
 
@@ -998,13 +1029,18 @@
                 const silent = channel.tach === null || channel.tach === undefined
                     || Number(channel.tach) < 200;
 
-                const $panel = $('<div class="fc-bench"/>');
-                $panel.append($('<div class="fc-bench-head"/>')
+                /* one row per channel: the channel and what it reads on the left, its floor and
+                   the two instruments on the right */
+                const $head = $('<div class="fc-bench-head"/>')
                     .append(tech(name).addClass('fc-strong'))
                     .append(' ')
                     .append(tech(number_or_dash(channel.tach, ' rpm')))
                     .append(' ')
-                    .append(tech(number_or_dash(channel.duty, '%'))));
+                    .append(tech(number_or_dash(channel.duty, '%')));
+                const $panel = $('<div/>');
+                const add_row = function () {
+                    $body.append($('<tr/>').append($('<td/>').append($head)).append($('<td/>').append($panel)));
+                };
 
                 $panel.append($('<div class="fc-note"/>').text(
                     floor === null || floor === undefined
@@ -1032,7 +1068,7 @@
                     $panel.append(note(
                         "{{ lang._('This channel reports no turning fan, so there is nothing here to measure and nothing to drive.') }}"
                     ));
-                    $body.append($panel);
+                    add_row();
                     return;
                 }
 
@@ -1056,13 +1092,13 @@
                     .append($('<span/>').text("{{ lang._('Measure the floor at this duty') }}")));
                 $panel.append($controls);
 
-                $panel.append(note(
+                $panel.append(help_note(
                     "{{ lang._('Hold will not go below the floor. The measurement will, because that is what it is for: it writes the duty, watches the tachometer, and stops the moment the fan does. It hands the fan back afterwards in every case - at the end, on the fan stopping, on a signal, and on its own watchdog.') }}"
                 ));
-                $panel.append(note(
+                $panel.append(help_note(
                     "{{ lang._('Neither can go below the number fanctl-io itself enforces, and nothing on this page can lower that. If a fan is still turning at that duty, the honest reading is that this is as low as this machine will let anyone go: to measure further down, write the measurement into /usr/local/etc/fanctl/floor.conf on the firewall, which is a deliberate act by somebody in front of it.') }}"
                 ));
-                $body.append($panel);
+                add_row();
             });
         }
 
@@ -2267,11 +2303,12 @@
            the rules have changed underneath a fan. */
         $('#saveAct').click(function () {
             const $button = $(this);
+            const $progress = $('#frm_general_progress');
             $button.prop('disabled', true);
+            $progress.addClass('fa fa-spinner fa-pulse');
             saveFormToEndpoint('/api/fanctl/settings/set', 'frm_general', function () {
-                $('#OPNsenseStdWaitDialog').modal('show');
                 ajaxCall('/api/fanctl/service/reconfigure', {}, function (data) {
-                    $('#OPNsenseStdWaitDialog').modal('hide');
+                    $progress.removeClass('fa fa-spinner fa-pulse');
                     $button.prop('disabled', false);
                     updateServiceControlUI('fanctl');
                     reload_state();
@@ -2280,11 +2317,10 @@
                         show_message(BootstrapDialog.TYPE_WARNING, "{{ lang._('Fan Control') }}",
                             "{{ lang._('The settings were saved, but the service did not take them.') }}"
                             + failure_text(data));
-                    } else {
-                        $('#saveAct_done').show().delay(2000).fadeOut();
                     }
                 });
             }, false, function () {
+                $progress.removeClass('fa fa-spinner fa-pulse');
                 $button.prop('disabled', false);
             });
         });
@@ -2553,12 +2589,16 @@
 
     .fc-alert { margin: 10px; }
     .fc-panels { padding: 0 10px 10px; }
+    /* the heading of a Hardware section, as OPNsense's base_form draws one */
+    .fc-head-row { padding-top: 5px; padding-bottom: 5px; font-size: 16px; }
+    .fc-head-row small { font-size: 12px; font-weight: normal; }
+    /* under "full help" until it is turned on */
+    .fc-help { display: none; }
     .fc-note { font-size: 85%; opacity: 0.85; padding-top: 4px; }
     .fc-sub { font-size: 85%; opacity: 0.75; }
     .fc-muted { opacity: 0.7; }
     .fc-strong { font-weight: bold; }
     .fc-action { margin-top: 10px; }
-    .fc-label { display: block; margin-top: 10px; margin-bottom: 4px; }
     .fc-section { padding: 10px 0; }
     .fc-section-head {
         display: flex;
@@ -2576,12 +2616,6 @@
     .fc-tech {
         font-family: monospace;
         unicode-bidi: plaintext;
-    }
-
-    .fc-detail > tbody > tr > th {
-        width: 35%;
-        font-weight: normal;
-        opacity: 0.8;
     }
 
     /* The header, which is outside every .tab-pane - which is why every element in it
@@ -2681,21 +2715,10 @@
        it down, because every one of them is transparent by default. */
     #fanctl > .tab-pane { background-color: inherit; }
 
-    .fc-sticky {
-        position: sticky;
-        bottom: 0;
-        padding: 8px 15px;
-        background-color: inherit;
-        box-shadow: 0 -1px 0 rgba(128, 128, 128, 0.3);
-    }
 
     .fc-notes { margin: 0; padding-inline-start: 1.4em; }
     .fc-notes > li { font-size: 85%; opacity: 0.85; padding-bottom: 4px; }
 
-    .fc-bench {
-        padding: 10px 0;
-        border-block-start: 1px solid rgba(127, 127, 127, 0.25);
-    }
     .fc-bench-head > * { margin-inline-end: 8px; }
     .fc-bench-controls { padding-top: 6px; }
     .fc-bench-controls > * { margin-inline-end: 6px; margin-top: 4px; }
@@ -2808,45 +2831,45 @@
     </div>
 
     <div id="settings" class="tab-pane fade in">
-        <div class="alert alert-info fc-alert" role="alert">
-            <i class="fa fa-fw fa-info-circle"></i>
-            {{ lang._('Saving writes these settings and restarts the controller, because it reads them once, when it starts. A restart hands every fan back to the hardware on the way past, which is the right thing to do when the rules have changed underneath one. Nothing here lowers a floor that was measured on your hardware.') }}
-        </div>
-        {{ partial("layout_partials/base_form", ['fields': generalForm, 'id': 'frm_general']) }}
-        {# Thirteen fields with a help block each is a long pane, and a Save button at the bottom
-           of it is a trip back to the top. It follows the reader down instead. #}
-        <div class="col-md-12 fc-sticky">
-            <button class="btn btn-primary" id="saveAct" type="button"><b>{{ lang._('Save and apply') }}</b></button>
-            <span id="saveAct_done" class="text-success" style="display: none; margin: 0 10px;">
-                <i class="fa fa-check"></i> {{ lang._('Applied') }}
-            </span>
-        </div>
+        {{ partial("layout_partials/base_form", ['fields': generalForm, 'id': 'frm_general', 'apply_btn_id': 'saveAct']) }}
     </div>
 
+    {# Laid out the way OPNsense lays out a form: sections with a heading, what is read on the
+       left and the reading on the right, and the long explanations under a "full help" switch
+       like the one the settings tab has. #}
     <div id="hardware" class="tab-pane fade in">
-        <div class="alert alert-info fc-alert" role="alert">
-            <i class="fa fa-fw fa-info-circle"></i>
-            {{ lang._('What was found in this machine, what the shipped table says about it, and the one instrument this plugin has: the floor test. Probing reads and writes nothing.') }}
-            <button id="probeRefreshAct" class="btn btn-xs btn-default" type="button">
-                <i class="fa fa-fw fa-refresh"></i> {{ lang._('Refresh') }}
-            </button>
-        </div>
-        <div class="fc-panels">
-            <div class="fc-section">
-                <div class="fc-section-head">{{ lang._('The chip') }}</div>
-                <div id="chip-body"></div>
-            </div>
-            <div class="fc-section">
-                <div class="fc-section-head">{{ lang._('This appliance') }}</div>
-                <div id="model-body"></div>
-            </div>
-            <div class="fc-section">
-                <div class="fc-section-head">{{ lang._('Floors, and how to measure one') }}</div>
-                <div class="fc-note">
-                    {{ lang._('A floor is the lowest duty at which a fan that is already turning keeps turning, measured on this machine, plus one step. It is not the duty at which a stopped fan starts - that is higher on every fan ever made, and measuring it would mean stopping a fan on a firewall that is in service. Nothing is driven below a floor, and nothing is driven at all on a channel whose floor has never been measured.') }}
-                </div>
-                <div id="workbench-body"></div>
-            </div>
+        <div class="table-responsive">
+            <table class="table table-striped table-condensed fc-form">
+                <colgroup>
+                    <col style="width: 25%;"/>
+                    <col style="width: 75%;"/>
+                </colgroup>
+                <thead>
+                    <tr>
+                        <th colspan="2">
+                            <div class="fc-head-row">
+                                <b>{{ lang._('The chip') }}</b>
+                                <span class="pull-right">
+                                    <i class="fa fa-info-circle fa-sm fa-fw text-primary"></i> <small>{{ lang._('full help') }}</small>
+                                    <a href="#" class="fc-help-toggle"><i class="fa fa-toggle-off fa-fw text-danger"></i></a>
+                                    <button id="probeRefreshAct" class="btn btn-xs btn-default" type="button" title="{{ lang._('Refresh') }}">
+                                        <i class="fa fa-fw fa-refresh"></i>
+                                    </button>
+                                </span>
+                            </div>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody id="chip-body"></tbody>
+                <thead>
+                    <tr><th colspan="2"><div class="fc-head-row"><b>{{ lang._('This appliance') }}</b></div></th></tr>
+                </thead>
+                <tbody id="model-body"></tbody>
+                <thead>
+                    <tr><th colspan="2"><div class="fc-head-row"><b>{{ lang._('Floors, and how to measure one') }}</b></div></th></tr>
+                </thead>
+                <tbody id="workbench-body"></tbody>
+            </table>
         </div>
     </div>
 </div>

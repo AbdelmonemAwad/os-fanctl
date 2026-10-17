@@ -319,6 +319,13 @@ Menu: **System → Fan Control** (it is about the appliance, not about the netwo
 `/var/db/fanctl`: `baseline.json`, `measured.json`, `held.json`, `status.json`, `incident.json`,
 and the helper's own `ch<n>.state`.
 
+The page has three tabs under the strip of vital readings. **Readings** is the record. **Settings**
+is OPNsense's own form with the form's own **Apply**, which saves and restarts the controller
+(~~a "Save and apply" button that followed the reader down the form~~ until 2026-10-17: the form
+is short with full help off, and OPNsense's forms keep their button at the end). **Hardware** is
+laid out like a form too - the chip, this appliance, the floor workbench one channel a row - with
+the long explanations under its **full help** switch, as on every OPNsense form.
+
 Two bugs found in `os-frontpanel`'s rc script are not repeated here, and both are commented at the
 line that avoids them: `daemon(8)` writes its pidfile with **no trailing newline**, so `read(1)`
 reports failure having already assigned the value — the value is read first and judged afterwards —
