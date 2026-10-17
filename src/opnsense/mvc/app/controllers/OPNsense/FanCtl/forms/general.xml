@@ -7,7 +7,7 @@
         <id>fanctl.general.enabled</id>
         <label>Enabled</label>
         <type>checkbox</type>
-        <help>Nothing runs until this is on. Turning it off stops the service, and stopping the service hands every fan back to the hardware before it goes - so switching this off is always safe, and is the right thing to do if anything here is behaving in a way you do not understand.</help>
+        <help>Nothing runs until this is on. Turning it off stops the service, and stopping the service hands every fan back to the hardware before it goes - so switching this off is always safe, and is the right thing to do if anything here is behaving in a way you do not understand. Apply writes these settings and restarts the controller, because it reads them once, when it starts; a restart hands every fan back to the hardware on the way past, which is the right thing to do when the rules have changed underneath one. Nothing here lowers a floor that was measured on your hardware.</help>
     </field>
     <field>
         <id>fanctl.general.mode</id>
