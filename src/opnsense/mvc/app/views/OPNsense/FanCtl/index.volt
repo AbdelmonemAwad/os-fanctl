@@ -3018,3 +3018,5 @@
         </div>
     </div>
 </div>
+
+{{ partial("OPNsense/FanCtl/credit") }}
