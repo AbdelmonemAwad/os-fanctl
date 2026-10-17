@@ -637,7 +637,10 @@
            as well, so a fresh installation and a channel the record has never seen still produce
            a row with a live number in it and an empty track behind it. */
         function row(opts) {
-            const $row = $('<div class="fc-row"/>');
+            /* opts.card draws the same reading as a card in a grid - the temperatures are drawn
+               this way: the name over its sensor, the reading large, a short band, and the three
+               figures of the window under it - rather than a line as wide as the page. */
+            const $row = $('<div class="fc-row"/>').toggleClass('fc-card', !!opts.card);
             const suffix = unit_suffix(opts.unit);
             const decimals = opts.decimals || 0;
             /* A window the record kept a slot for and put nothing into carries min, mean and
@@ -661,10 +664,12 @@
                 ? NaN : Number(opts.now);
 
             const $head = $('<div class="fc-row-head"/>').appendTo($row);
-            $('<span class="fc-row-name"/>').text(String(opts.name)).appendTo($head);
+            const $title = opts.card ? $('<div class="fc-card-title"/>').appendTo($head) : $head;
+            $('<span class="fc-row-name"/>').text(String(opts.name))
+                .attr('title', opts.card ? String(opts.name) : null).appendTo($title);
             if (opts.id) {
                 $('<span class="fc-row-id"/>').attr('dir', 'ltr').text(String(opts.id))
-                    .appendTo($head);
+                    .attr('title', opts.card ? String(opts.id) : null).appendTo($title);
             }
             (opts.chips || []).forEach(function ($chip) { $head.append($chip); });
 
@@ -679,6 +684,14 @@
                stylesheet reaches every fc- element and takes the direction from the first
                strong character - which in 63.0 C is the C. */
             const $now = $('<span class="fc-row-now"/>').appendTo($head);
+            /* A card's reading takes the theme's warning colour at the limit and its danger
+               colour past the panic point - judged on the reading now, which is what the large
+               number is, and never on the window's highest. */
+            if (opts.now_tone === 'fc-hot') {
+                $now.addClass('text-danger');
+            } else if (opts.now_tone === 'fc-warm') {
+                $now.addClass('text-warning');
+            }
             if (isFinite(now)) {
                 $now.append($('<span/>').attr('dir', 'ltr').text(written(now) + suffix));
             } else {
@@ -694,7 +707,32 @@
             bar(low, high, mean, isFinite(now) ? now : null, opts.top, opts.rungs || [],
                 opts.tone || '').toggleClass('fc-thin', thin).appendTo($row);
 
-            if (window_data) {
+            if (window_data && opts.card) {
+                /* the three figures each under its own word, in three even columns */
+                const $stats = $('<div class="fc-card-stats"/>').appendTo($row);
+                [
+                    ["{{ lang._('lowest') }}", low],
+                    ["{{ lang._('mean') }}", mean],
+                    ["{{ lang._('highest') }}", high]
+                ].forEach(function (pair) {
+                    $('<div class="fc-card-stat"/>')
+                        .append($('<span class="fc-card-stat-key"/>').text(pair[0]))
+                        .append($('<span class="fc-card-stat-value"/>').attr('dir', 'ltr')
+                            .text(written(pair[1]) + suffix))
+                        .appendTo($stats);
+                });
+                const spent = trend_above(window_data.above, opts.rungs || []);
+                const watched = trend_coverage(coverage);
+                if (spent || watched) {
+                    const $foot = $('<div class="fc-row-foot"/>').appendTo($row);
+                    if (spent) {
+                        $('<span class="fc-row-above"/>').text(spent).appendTo($foot);
+                    }
+                    if (watched) {
+                        $('<span class="fc-row-thin"/>').text(watched).appendTo($foot);
+                    }
+                }
+            } else if (window_data) {
                 const $foot = $('<div class="fc-row-foot"/>').appendTo($row);
                 $('<span/>').attr('dir', 'ltr').text(
                     written(low) + suffix + ' / ' + written(mean) + suffix + ' / '
@@ -1631,6 +1669,7 @@
                     : fc_fill("{{ lang._('{read} of {found} read') }}",
                         {read: fc_num(counts.read), found: fc_num(counts.found)}));
             $into.append(temps.section);
+            temps.body.addClass('fc-cards');
 
             const seen_names = {};
             let frozen = 0;
@@ -1677,21 +1716,27 @@
                     top: top,
                     rungs: rungs,
                     tone: tone_of(band_high),
-                    why: why
+                    now_tone: tone_of(Number(sensor.celsius)),
+                    why: why,
+                    card: true
                 };
                 if (fold_cores && String(sensor.kind) === 'cpu_core') {
                     if ($cores === null) {
-                        temps.body.append(row($.extend({}, one, {
+                        /* the hottest core stands for them all in one card, and the toggle that
+                           opens the rest is in that card; the rest are a grid of their own under
+                           the first one */
+                        const $summary = row($.extend({}, one, {
                             name: "{{ lang._('processor cores') }}" + ' (' + cores.length + ')'
-                        })));
-                        $('<button type="button" class="fc-strip"/>')
+                        })).appendTo(temps.body);
+                        $('<button type="button" class="fc-strip fc-card-toggle"/>')
                             .append($('<i class="fa fa-fw"/>').addClass(show_cores ? 'fa-angle-up' : 'fa-angle-down'))
                             .append(' ')
                             .append($('<span/>').text(show_cores
                                 ? "{{ lang._('Hide them') }}" : "{{ lang._('Show them') }}"))
                             .on('click', function () { show_cores = !show_cores; draw_rows(); })
-                            .appendTo(temps.body);
-                        $cores = $('<div class="fc-cores"/>').toggle(show_cores).appendTo(temps.body);
+                            .appendTo($summary);
+                        $cores = $('<div class="fc-cards fc-cores"/>').toggle(show_cores)
+                            .insertAfter(temps.body);
                     }
                     $cores.append(row(one));
                     return;
@@ -1715,7 +1760,8 @@
                     top: top,
                     rungs: rungs,
                     tone: tone_of(Number(((series[key].windows || {})[trend_window] || {}).max)),
-                    absent: "{{ lang._('This sensor is in the record and the machine is not reporting it now.') }}"
+                    absent: "{{ lang._('This sensor is in the record and the machine is not reporting it now.') }}",
+                    card: true
                 }));
             });
 
@@ -2449,6 +2495,96 @@
         gap: 8px;
         flex-wrap: wrap;
         margin-bottom: 4px;
+    }
+
+    /* The temperatures as cards: as many to a line as the width takes, all the same width, so
+       a reading and its band are one glance on any screen rather than a thread across it. */
+    .fc-cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        gap: 10px;
+    }
+
+    .fc-cards.fc-cores {
+        margin-top: 10px;
+    }
+
+    .fc-row.fc-card {
+        display: flex;
+        flex-direction: column;
+        max-width: none;
+        padding: 10px 12px;
+        border: 1px solid rgba(128, 128, 128, 0.3);
+        border-radius: 4px;
+        background-color: rgba(128, 128, 128, 0.05);
+    }
+
+    /* the name and its sensor on top, the reading on a line of its own under them: side by side,
+       a 22-pixel number left a card's name about twelve characters */
+    .fc-card .fc-row-head {
+        flex-direction: column;
+        flex-wrap: nowrap;
+        align-items: stretch;
+        gap: 4px;
+        margin-bottom: 8px;
+    }
+
+    /* the name over the sensor it was read from, both cut short rather than wrapped; the whole
+       of each is in its title */
+    .fc-card-title {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+    }
+
+    .fc-card .fc-row-now {
+        margin-inline-start: 0;
+        font-size: 24px;
+        line-height: 1.1;
+    }
+
+    .fc-card .fc-bar {
+        height: 8px;
+    }
+
+    .fc-card-stats {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+        margin-top: 8px;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .fc-card-stat {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+    }
+
+    .fc-card-stat-key {
+        font-size: 11px;
+        opacity: 0.7;
+    }
+
+    .fc-card-stat-value {
+        font-size: 12px;
+        font-weight: bold;
+        white-space: nowrap;
+    }
+
+    .fc-card .fc-row-foot {
+        gap: 6px;
+        margin-top: 6px;
+    }
+
+    .fc-card .fc-row-id {
+        white-space: nowrap;
+    }
+
+    .fc-card-toggle {
+        align-self: flex-start;
+        width: auto;
+        margin-top: 6px;
     }
 
     .fc-row-name {
