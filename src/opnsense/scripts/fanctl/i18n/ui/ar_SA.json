@@ -227,5 +227,8 @@
   "Model": "الطراز",
   "The service is running and owns the chip, so nothing here can be used - stop it first.": "الخدمة تعمل وتمسك بالرقاقة، فلا يمكن استخدام شيء هنا - أوقفها أولًا.",
   "Two writers on the same two ports, with nothing to serialise either of them against the kernel driver that reads the same chip without a lock, is exactly the race this plugin is arranged to avoid.": "كاتبان على المنفذين نفسيهما، ولا شيء ينظّم أيًّا منهما مع برنامج تشغيل النواة الذي يقرأ الرقاقة نفسها دون قفل، هو بالضبط السباق الذي رُتّب هذا المكوّن الإضافي لتجنّبه.",
-  "full help": "مساعدة كاملة"
+  "full help": "مساعدة كاملة",
+  "lowest": "الأدنى",
+  "mean": "المتوسط",
+  "highest": "الأعلى"
 }

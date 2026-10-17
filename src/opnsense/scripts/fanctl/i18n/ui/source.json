@@ -227,5 +227,8 @@
  "Model",
  "The service is running and owns the chip, so nothing here can be used - stop it first.",
  "Two writers on the same two ports, with nothing to serialise either of them against the kernel driver that reads the same chip without a lock, is exactly the race this plugin is arranged to avoid.",
- "full help"
+ "full help",
+ "lowest",
+ "mean",
+ "highest"
 ]
