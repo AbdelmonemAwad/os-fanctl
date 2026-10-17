@@ -197,10 +197,23 @@ export default class FanCtl extends BaseTableWidget {
         /* Hottest first: the top line is the sensor the curve would be deciding from. A sensor
            that answered with something that is not a number is dropped rather than drawn at zero,
            because a bar at the far left is a claim that the machine is cold. */
-        return sensors
+        const sorted = sensors
             .filter((sensor) => Number.isFinite(Number(sensor && sensor.celsius)))
             .slice()
             .sort((a, b) => Number(b.celsius) - Number(a.celsius));
+
+        /* The processor's cores as one line, the hottest of them: eight identical bars made this
+           widget the tallest thing on the dashboard and said nothing the hottest one does not. */
+        const cores = sorted.filter((sensor) => String(sensor.kind) === 'cpu_core');
+        if (cores.length < 3) {
+            return sorted;
+        }
+        const lead = Object.assign({}, cores[0], {
+            label: String(this.translations.cores || '%s').replace('%s', this._format(cores.length))
+        });
+        return sorted
+            .filter((sensor) => String(sensor.kind) !== 'cpu_core' || sensor === cores[0])
+            .map((sensor) => (sensor === cores[0] ? lead : sensor));
     }
 
     _fanRow(fan) {

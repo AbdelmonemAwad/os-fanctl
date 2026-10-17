@@ -226,5 +226,6 @@
   "Scale ends at the panic point, %s; the mark is the limit, %s": "ينتهي المقياس عند نقطة الطوارئ، %s؛ والعلامة هي الحد، %s",
   "No fan or temperature readings yet.": "لا قراءات للمراوح أو الحرارة بعد.",
   "The readings are from %s and are no longer being updated.": "القراءات من %s ولم تعد تُحدَّث.",
-  "Could not read the fan control status.": "تعذّرت قراءة حالة التحكم بالمراوح."
+  "Could not read the fan control status.": "تعذّرت قراءة حالة التحكم بالمراوح.",
+  "processor cores (%s)": "أنوية المعالج (%s)"
 }
