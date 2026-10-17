@@ -2758,27 +2758,33 @@
        carries an fc- class. The bidi rule at the top of this block is global and reaches it;
        the selectors beside that rule are scoped to .tab-pane and do not. */
     .fc-head { padding: 10px 12px; margin-bottom: 8px; }
-    .fc-vitals { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: flex-start; }
+    /* The vital readings as summary cards, the same as the coprocessor's pages in os-xgs-npu: the
+       theme's text and a faint tint of it, and a coloured edge that says how the reading stands. */
+    .fc-vitals { display: flex; flex-wrap: wrap; gap: 12px; align-items: stretch; }
 
     .fc-vital {
-        flex: 1 1 14em;
-        min-width: 11em;
+        flex: 1 1 200px;
+        min-width: 190px;
         display: flex;
         flex-direction: column;
-        padding-inline-start: 10px;
-        border-inline-start: 2px solid rgba(128, 128, 128, 0.35);
+        padding: 10px 14px;
+        border: 1px solid rgba(128, 128, 128, 0.25);
+        border-inline-start: 4px solid #9e9e9e;
+        border-radius: 3px;
+        background-color: rgba(128, 128, 128, 0.04);
     }
 
-    .fc-vital.fc-hot { border-inline-start-color: currentColor; }
+    .fc-vital.fc-hot { border-inline-start-color: #d9534f; }
+    .fc-vital > .fa { opacity: 0.35; font-size: 18px; align-self: flex-end; margin-bottom: -18px; }
     .fc-vital-key {
         font-size: 11px;
         text-transform: uppercase;
-        letter-spacing: 0.06em;
-        opacity: 0.7;
+        letter-spacing: 0.04em;
+        opacity: 0.6;
     }
-    .fc-vital-value { font-size: 18px; line-height: 1.3; font-weight: 600; font-family: inherit; }
+    .fc-vital-value { font-size: 19px; line-height: 1.3; font-weight: 600; font-family: inherit; margin: 2px 0; }
     .fc-vital-value .label { font-size: 12px; font-weight: 600; }
-    .fc-vital-sub { font-size: 85%; opacity: 0.8; }
+    .fc-vital-sub { font-size: 12px; opacity: 0.7; }
     .fc-vital-acts {
         margin-inline-start: auto;
         display: flex;
@@ -2909,16 +2915,19 @@
     </div>
     <div class="fc-vitals">
         <div class="fc-vital" id="fc-vital-heat">
+            <i class="fa fa-thermometer-half"></i>
             <span class="fc-vital-key">{{ lang._('Hottest') }}</span>
             <span class="fc-vital-value fc-tech" dir="ltr"></span>
             <span class="fc-vital-sub"></span>
         </div>
         <div class="fc-vital" id="fc-vital-air">
+            <i class="fa fa-snowflake-o"></i>
             <span class="fc-vital-key">{{ lang._('Fans') }}</span>
             <span class="fc-vital-value fc-tech" dir="ltr"></span>
             <span class="fc-vital-sub"></span>
         </div>
         <div class="fc-vital" id="fc-vital-custody">
+            <i class="fa fa-hand-paper-o"></i>
             <span class="fc-vital-key">{{ lang._('Fans held by') }}</span>
             <span class="fc-vital-value"></span>
             <span class="fc-vital-sub"></span>
