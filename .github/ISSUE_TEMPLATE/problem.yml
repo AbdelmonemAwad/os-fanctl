@@ -9,7 +9,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        On an appliance with os-xgs-npu, **XGS Coprocessor - Problem Reports** may have filed this already, cleaned of addresses and serial numbers. Pasting by hand? Take out addresses, MAC addresses, serial numbers and host names first, and never attach a configuration backup.
+        On an appliance with os-xgs-npu, **XGS - Problem Reports** may have filed this already, cleaned of addresses and serial numbers. Pasting by hand? Take out addresses, MAC addresses, serial numbers and host names first, and never attach a configuration backup.
   - type: dropdown
     id: appliance
     attributes:
