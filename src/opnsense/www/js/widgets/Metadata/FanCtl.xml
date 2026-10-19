@@ -1,3 +1,7 @@
+<!--
+    SPDX-License-Identifier: BSD-2-Clause
+    Copyright (c) 2026 Abdelmonem Awad <eg2@live.com>
+-->
 <metadata>
     <!--
         The element name is the widget id, and core uses it as the key of this widget in every

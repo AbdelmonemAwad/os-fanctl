@@ -1,3 +1,7 @@
+<!--
+    SPDX-License-Identifier: BSD-2-Clause
+    Copyright (c) 2026 Abdelmonem Awad <eg2@live.com>
+-->
 <menu>
     <!--
         Under System, and not under Services or Interfaces, because the subject of this page is

@@ -1,3 +1,7 @@
+#-
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright (c) 2026 Abdelmonem Awad <eg2@live.com>
+#
 # The daily self-update of os-fanctl: the latest release on GitHub, taken only when it is ahead
 # of what is installed. See /usr/local/opnsense/scripts/fanctl/self-update.py.
 #

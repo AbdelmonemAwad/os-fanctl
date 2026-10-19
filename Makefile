@@ -1,3 +1,7 @@
+#-
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright (c) 2026 Abdelmonem Awad <eg2@live.com>
+#
 PLUGIN_NAME=		fanctl
 PLUGIN_VERSION=		1.0
 PLUGIN_COMMENT=		Fan control for appliances whose vendor fan curve is gone
