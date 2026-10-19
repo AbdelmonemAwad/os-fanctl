@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+#-
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright (c) 2026 Abdelmonem Awad <eg2@live.com>
+#
 """No comment inside a widget's <translations>, because one there empties the dashboard.
 
 The dashboard controller builds its widget list like this (V: OPNsense 26.7.4_1,

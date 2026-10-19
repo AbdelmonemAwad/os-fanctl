@@ -1,3 +1,7 @@
+#-
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright (c) 2026 Abdelmonem Awad <eg2@live.com>
+#
 # The fan and temperature history. See src/opnsense/scripts/fanctl/history.py.
 #
 # This line wakes the sampler every minute. It is NOT the sampling interval and it is not a

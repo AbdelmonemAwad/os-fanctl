@@ -1,3 +1,7 @@
+#-
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright (c) 2026 Abdelmonem Awad <eg2@live.com>
+#
 name: checks
 
 # What a change to this plugin has to survive before it can be merged.
@@ -117,6 +121,8 @@ jobs:
       - uses: actions/checkout@v7
       - name: No real addresses, hardware identifiers or credentials
         run: python3 tools/check-private-data.py .
+      - name: Every source file carries the copyright line
+        run: python3 tools/add-copyright.py
 
       # Arabic belongs in the catalogue and nowhere else: a sentence written straight into a
       # template cannot be reviewed by somebody who does not read it, cannot be changed
