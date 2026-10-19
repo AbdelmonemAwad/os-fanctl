@@ -1896,6 +1896,14 @@
                    for the speed, by the footer's rule: nothing here knows what this fan can do. */
                 const by_speed = (duty === null || duty === undefined)
                     && fan.rpm !== null && fan.rpm !== undefined;
+                /* Its bar is scaled as a temperature is when no limit is known for it: a quarter
+                   above the highest the window holds, or the reading now if that is higher. An
+                   empty track - no scale at all - read to the owner as a fan that had stopped. */
+                const speed_series = of('R|' + channel);
+                const speed_window = (speed_series && speed_series.windows)
+                    ? speed_series.windows[trend_window] : null;
+                const speed_high = Math.max(Number(fan.rpm) || 0,
+                    Number(speed_window && speed_window.max) || 0);
                 air.body.append(row({
                     name: (fan.label && fan.label !== 'unknown') ? String(fan.label) : channel,
                     id: channel,
@@ -1904,7 +1912,7 @@
                     decimals: 0,
                     series: of((by_speed ? 'R|' : 'D|') + channel),
                     extra: by_speed ? null : of('R|' + channel),
-                    top: by_speed ? 0 : 100,
+                    top: by_speed ? speed_high * 1.25 : 100,
                     rungs: [],
                     chips: chips,
                     why: why,
