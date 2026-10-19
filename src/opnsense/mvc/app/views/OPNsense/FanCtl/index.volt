@@ -358,7 +358,8 @@
         let show_silent = false;
         /* The processor's cores, one row until asked for: on most of these machines every core
            reads the same number, and eight identical bars said nothing the hottest one did not. */
-        let show_cores = false;
+        /* which folded groups of sensors are open, by kind - see FOLD in draw_rows() */
+        const show_fold = {};
 
         /* The incident that has been read. Keyed on the incident itself, so a NEW one appears
            even after an old one was dismissed. */
@@ -1247,6 +1248,15 @@
         /* The name a person reads for a sysctl. The same mapping sensors.py
            makes for the live table, repeated here rather than sent, because a
            label is the one field in this plugin that is pure presentation. */
+        /* The reading a driver's copy stands for - sensors.py's _MIRRORS, the same three. */
+        function mirror_of(name) {
+            const text = String(name || '');
+            if (/^dev\.octep\.\d+\.temperature\.npu$/.test(text)) { return 'cpld.npu_c'; }
+            if (/^dev\.octep\.\d+\.temperature\.inlet$/.test(text)) { return 'cpld.inlet_c'; }
+            if (/^dev\.npuep\.\d+\.temperature$/.test(text)) { return 'npu.zone:ap-thermal-ic'; }
+            return null;
+        }
+
         function fc_sensor(name) {
             /* The name is not always there, and this function took the whole page down when
                it was not. history.py writes hottest.sensor and verdict.params.sensor from
@@ -1265,6 +1275,9 @@
                 return fc_fill("{{ lang._('core {n}') }}", {n: parts[2]});
             }
             if (text.indexOf('dev.pchtherm.') === 0) { return "{{ lang._('chipset') }}"; }
+            if (text.indexOf('dev.amdtemp.') === 0) { return "{{ lang._('processor') }}"; }
+            if (mirror_of(text) === 'cpld.inlet_c') { return "{{ lang._('inlet air') }}"; }
+            if (mirror_of(text)) { return "{{ lang._('the coprocessor') }}"; }
             if (text.indexOf('hw.acpi.thermal.') === 0 && parts.length >= 4) {
                 return fc_fill("{{ lang._('board zone {n}') }}",
                     {n: parts[3].replace('tz', '')});
@@ -1683,13 +1696,24 @@
 
             const seen_names = {};
             let frozen = 0;
-            /* The cores as one row - the hottest, the list being sorted hottest first - and the
-               rest behind a toggle, where there are enough of them to be worth folding. */
-            const cores = sensors.filter(function (sensor) {
-                return String(sensor.kind) === 'cpu_core' && constant.indexOf(String(sensor.name || '')) === -1;
+            /* Sensors of one kind as one card - the hottest, the list being sorted hottest first -
+               and the rest behind a toggle, where there are enough of them to be worth folding.
+               The processor's cores were the only kind folded, and the XGS 136, which also
+               reports its coprocessor's four cores and the PHY behind each of twelve ports, drew
+               thirty cards where the XGS 3300 draws six. */
+            const FOLD = {
+                cpu_core: "{{ lang._('processor cores') }}",
+                npu_core: "{{ lang._('coprocessor cores') }}",
+                phy: "{{ lang._('port PHYs') }}"
+            };
+            const members = {};
+            sensors.forEach(function (sensor) {
+                const kind = String(sensor.kind);
+                if (FOLD[kind] && constant.indexOf(String(sensor.name || '')) === -1) {
+                    members[kind] = (members[kind] || 0) + 1;
+                }
             });
-            const fold_cores = cores.length >= 3;
-            let $cores = null;
+            const folded = {};
             sensors.forEach(function (sensor) {
                 const name = String(sensor.name || '');
                 seen_names[name] = true;
@@ -1730,25 +1754,27 @@
                     why: why,
                     card: true
                 };
-                if (fold_cores && String(sensor.kind) === 'cpu_core') {
-                    if ($cores === null) {
-                        /* the hottest core stands for them all in one card, and the toggle that
-                           opens the rest is in that card; the rest are a grid of their own under
-                           the first one */
+                const kind = String(sensor.kind);
+                if (FOLD[kind] && members[kind] >= 3) {
+                    if (!folded[kind]) {
+                        /* the hottest of the kind stands for them all in one card, and the toggle
+                           that opens the rest is in that card; the rest are a grid of their own
+                           under the cards */
+                        const open = !!show_fold[kind];
                         const $summary = row($.extend({}, one, {
-                            name: "{{ lang._('processor cores') }}" + ' (' + cores.length + ')'
+                            name: FOLD[kind] + ' (' + members[kind] + ')'
                         })).appendTo(temps.body);
                         $('<button type="button" class="fc-strip fc-card-toggle"/>')
-                            .append($('<i class="fa fa-fw"/>').addClass(show_cores ? 'fa-angle-up' : 'fa-angle-down'))
+                            .append($('<i class="fa fa-fw"/>').addClass(open ? 'fa-angle-up' : 'fa-angle-down'))
                             .append(' ')
-                            .append($('<span/>').text(show_cores
+                            .append($('<span/>').text(open
                                 ? "{{ lang._('Hide them') }}" : "{{ lang._('Show them') }}"))
-                            .on('click', function () { show_cores = !show_cores; draw_rows(); })
+                            .on('click', function () { show_fold[kind] = !open; draw_rows(); })
                             .appendTo($summary);
-                        $cores = $('<div class="fc-cards fc-cores"/>').toggle(show_cores)
+                        folded[kind] = $('<div class="fc-cards fc-cores"/>').toggle(open)
                             .insertAfter(temps.body);
                     }
-                    $cores.append(row(one));
+                    folded[kind].append(row(one));
                     return;
                 }
                 temps.body.append(row(one));
@@ -1760,6 +1786,11 @@
                 if (series[key].kind !== 'T') { return; }
                 const name = String(series[key].name);
                 if (seen_names[name]) { return; }
+                /* os-xgs-npu's drivers hold copies of the coprocessor's readings for OPNsense's
+                   own widget; the collector drops a copy whose original it read, and the record
+                   still had the copy's hour under its sysctl name. */
+                const original = mirror_of(name);
+                if (original && seen_names[original]) { return; }
                 temps.body.append(row({
                     name: sensor_label(name),
                     id: name,

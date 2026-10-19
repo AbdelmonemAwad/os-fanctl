@@ -420,6 +420,11 @@ def _limit_name(name):
 # translates; `label` below is the English fallback for anywhere that has no
 # catalogue (the CLI, the log, a status file read over ssh).
 _CLASSIFY = (
+    # os-xgs-npu's copies of the coprocessor's readings, held by its drivers for OPNsense's own
+    # temperature widget - see _MIRRORS. Unclassified they were 'other', named by their sysctl.
+    (re.compile(r'^dev\.octep\.\d+\.temperature\.npu$'), 'npu', 'npu_die'),
+    (re.compile(r'^dev\.octep\.\d+\.temperature\.inlet$'), 'inlet', 'ambient'),
+    (re.compile(r'^dev\.npuep\.\d+\.temperature$'), 'npu', 'npu_die'),
     (re.compile(r'^dev\.cpu\.\d+\.temperature$'), 'cpu', 'cpu_core'),
     (re.compile(r'^dev\.coretemp\.'), 'cpu', 'cpu_core'),
     (re.compile(r'^dev\.amdtemp\.\d+\.ccd\d+$'), 'cpu', 'cpu_die'),
@@ -442,6 +447,24 @@ _CLASSIFY = (
 )
 
 
+# os-xgs-npu's drivers hold copies of the coprocessor's readings, written every minute by its
+# scripts/xgs/temperatures.sh so that OPNsense's own temperature widget has them. Each copy, and
+# the reading here that it copies.
+_MIRRORS = (
+    (re.compile(r'^dev\.octep\.\d+\.temperature\.npu$'), 'cpld.npu_c'),
+    (re.compile(r'^dev\.octep\.\d+\.temperature\.inlet$'), 'cpld.inlet_c'),
+    (re.compile(r'^dev\.npuep\.\d+\.temperature$'), 'npu.zone:ap-thermal-ic'),
+)
+
+
+def _mirror_of(name):
+    """The name of the reading this sensor is a copy of, or None."""
+    for pattern, original in _MIRRORS:
+        if pattern.match(str(name)):
+            return original
+    return None
+
+
 def _classify(name):
     for pattern, group, kind in _CLASSIFY:
         if pattern.match(name):
@@ -456,6 +479,16 @@ def _label(name, kind):
     `kind` and the catalogue; anything here would be untranslatable.
     """
     parts = name.split('.')
+    if name.startswith('dev.octep.') and name.endswith('.temperature.npu'):
+        return 'NPU (the coprocessor die), as its driver holds it'
+    if name.startswith('dev.octep.') and name.endswith('.temperature.inlet'):
+        return 'inlet air, as the driver holds it'
+    if name.startswith('dev.npuep.') and name.endswith('.temperature'):
+        return 'NPU, the SoC sensor, as its driver holds it'
+    if name.startswith('dev.amdtemp.') and len(parts) >= 3:
+        # core0.sensor0 is the processor's own reading on these Ryzen boards, not one core's;
+        # the name was the whole sysctl, on the page's hottest card too.
+        return 'processor, as amdtemp reads it'
     if kind == 'cpu_core' and name.startswith('dev.cpu.'):
         return 'core %s' % parts[2]
     if kind == 'chipset':
@@ -1174,6 +1207,23 @@ NCT_ATTACHED = {
 }
 
 
+def _superio_label(name):
+    """What a hardware-monitor input is, around the chip's own name for it.
+
+    The bare names - SYSTIN, CPUTIN, SMBUSMASTER 0 - read on the page as keys. This says only
+    what the chip itself says an input is - a pin, a reading it fetches over SMBus or PECI, or a
+    forward from the chipset - and never what a pin is wired to, which is the board's and not
+    known here (see NCT_ATTACHED).
+    """
+    if name.startswith('SMBUSMASTER'):
+        return 'hardware monitor, over SMBus (%s)' % name
+    if name.startswith('PECI'):
+        return 'processor, over PECI (%s)' % name
+    if name.startswith('PCH_'):
+        return 'from the chipset (%s)' % name
+    return 'hardware monitor pin %s' % name
+
+
 def read_superio(chip=None):
     """The hardware monitor's own temperature inputs, through chip.py.
 
@@ -1286,7 +1336,7 @@ def read_superio(chip=None):
                 'source': 'superio',
                 'group': 'board',
                 'kind': 'board_input',
-                'label': name,
+                'label': _superio_label(name),
                 # A claim where the chip makes one, 'unknown' everywhere else.
                 # See the table above: on a pin this is the honest answer and
                 # on a forward it is what the source WOULD be measuring.
@@ -1517,12 +1567,20 @@ def read_npu():
             elif zone.startswith('ap-thermal-cpu'):
                 label, kind, limit = 'NPU core %s' % zone[len('ap-thermal-cpu'):], 'npu_core', 100.0
             elif zone.endswith('.thermal'):
-                label, kind, limit = 'NPU CP die at %s' % zone[:-len('.thermal')], 'npu_die', 100.0
+                # The communication processors sit at 0xf2000000 + n * 0x2000000 on the ARMADA
+                # 8K family, so the zone's address names which one: f2400078 is CP0, f4400078
+                # CP1. Printed as the address, the label read as a register.
+                address = zone[:-len('.thermal')]
+                try:
+                    label = 'NPU CP%d die' % ((int(address, 16) - 0xf2000000) // 0x2000000)
+                except ValueError:
+                    label = 'NPU CP die at %s' % address
+                kind, limit = 'npu_die', 100.0
             else:
                 label, kind, limit = 'NPU %s' % zone, 'npu_other', 100.0
             key, group, attached = 'zone:%s' % zone, 'npu', 'coprocessor_die'
         elif parts[0] == 'phy':
-            label, kind, limit = 'PHY behind label %s' % parts[1], 'phy', 105.0
+            label, kind, limit = 'PHY of Port%s' % parts[1], 'phy', 105.0
             key, group, attached = 'phy:%s' % parts[1], 'nic', 'port_phy'
         else:
             continue
@@ -1666,6 +1724,14 @@ def read(catalogue=None, include_drives=False, include_superio=False,
         sensors.append(entry)
     for entry in read_npu():
         sensors.append(entry)
+
+    # A copy beside its original was the same sensor twice, the copy under its sysctl name - the
+    # XGS 3300's NPU at 76.6 C as dev.octep.0.temperature.npu and at 76.5 C as the CPLD's. It is
+    # kept only when the original was not read, which is when it is worth having.
+    read_here = {s['name'] for s in sensors if s.get('celsius') is not None}
+    sensors = [s for s in sensors if _mirror_of(s['name']) not in read_here]
+    unreadable = [n for n in unreadable if _mirror_of(n) not in read_here]
+    unreadable_why = [u for u in unreadable_why if _mirror_of(u['name']) not in read_here]
 
     # Confidence, last, because it is the only part that needs history.
     at = time.time()
