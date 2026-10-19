@@ -428,6 +428,9 @@ _CLASSIFY = (
     (re.compile(r'^dev\.cpu\.\d+\.temperature$'), 'cpu', 'cpu_core'),
     (re.compile(r'^dev\.coretemp\.'), 'cpu', 'cpu_core'),
     (re.compile(r'^dev\.amdtemp\.\d+\.ccd\d+$'), 'cpu', 'cpu_die'),
+    # core0.sensor0 is the processor's own reading on these Ryzen boards, not a core's: as a
+    # core it made "processor cores (5)" of a four-core XGS 136.
+    (re.compile(r'^dev\.amdtemp\.\d+\.core\d+\.sensor\d+$'), 'cpu', 'cpu_die'),
     (re.compile(r'^dev\.amdtemp\.'), 'cpu', 'cpu_core'),
     (re.compile(r'^dev\.pchtherm\.'), 'pch', 'chipset'),
     (re.compile(r'^hw\.acpi\.thermal\.'), 'acpi', 'acpi_zone'),
