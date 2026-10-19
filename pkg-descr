@@ -47,6 +47,17 @@ and what is wanted in it is a measurement rather than a datasheet.
 Plugin Changelog
 ================
 
+1.1
+
+* The page and the widget in Arabic, laid out like OPNsense's own pages,
+  the readings as cards and the summary on top
+* A fan the board drives itself, as on the Sophos XGS 3300, is shown by its
+  speed, with a working bar, and the page says it is only watched
+* Sensors named, not keyed: the coprocessor readings os-xgs-npu's drivers
+  copy for OPNsense's widget are dropped beside their originals, and many
+  sensors of one kind fold into one card
+* An update restarts a controller that only watches, so it takes effect
+
 1.0
 
 * Initial release
