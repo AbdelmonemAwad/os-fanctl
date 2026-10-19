@@ -592,7 +592,17 @@
             }
 
             const met = lines.filter(function (line) { return line.ok; }).length;
-            if (met === lines.length) {
+            /* A board that keeps its own fan curve - the XGS 3300's, tachometers through the CPLD
+               and no duty register - can never meet the six, and "0 of 6 conditions met" with a
+               button to hand back fans that were never taken read as a plugin that does not
+               work. It says what it is instead, and the button goes. */
+            const watch_only = !!(state_doc && state_doc.chip && state_doc.chip.writable === false);
+            $('#restoreAct').toggle(!watch_only);
+            if (watch_only) {
+                $head.append(label("{{ lang._('watched only') }}", 'label-info'));
+                $head.append(' ').append($('<span class="fc-sub"/>').text(
+                    "{{ lang._('This board keeps its own fan curve and has no way to set a fan from here, so the six conditions never apply: its fans are read, and never driven.') }}"));
+            } else if (met === lines.length) {
                 $head.append(label("{{ lang._('all conditions met') }}", 'label-success'));
             } else {
                 $head.append(label(fc_fill("{{ lang._('{met} of {all} conditions met') }}",
@@ -1855,6 +1865,9 @@
                     if (from.length > 0) {
                         $from.append(' ').append(tech(from.join(', ')));
                     }
+                } else if (state_doc && state_doc.chip && state_doc.chip.writable === false) {
+                    $from.append($('<span class="fc-muted"/>').text(
+                        "{{ lang._('the board drives this fan by its own curve') }}"));
                 } else {
                     $from.append($('<span class="fc-muted"/>').text(
                         "{{ lang._('nothing was decided for this fan') }}"));
@@ -1877,15 +1890,21 @@
 
                 const duty = (fan.output !== null && fan.output !== undefined)
                     ? fan.output : fan.duty;
+                /* A tachometer with no duty behind it - a board that keeps its own curve - is
+                   drawn on its speed, its record the speed's: the row was a dash and an empty bar
+                   over a fan turning at 7,500 rpm, which read as a fan nobody could read. No bar
+                   for the speed, by the footer's rule: nothing here knows what this fan can do. */
+                const by_speed = (duty === null || duty === undefined)
+                    && fan.rpm !== null && fan.rpm !== undefined;
                 air.body.append(row({
                     name: (fan.label && fan.label !== 'unknown') ? String(fan.label) : channel,
                     id: channel,
-                    now: duty,
-                    unit: 'pct',
+                    now: by_speed ? fan.rpm : duty,
+                    unit: by_speed ? 'rpm' : 'pct',
                     decimals: 0,
-                    series: of('D|' + channel),
-                    extra: of('R|' + channel),
-                    top: 100,
+                    series: of((by_speed ? 'R|' : 'D|') + channel),
+                    extra: by_speed ? null : of('R|' + channel),
+                    top: by_speed ? 0 : 100,
                     rungs: [],
                     chips: chips,
                     why: why,

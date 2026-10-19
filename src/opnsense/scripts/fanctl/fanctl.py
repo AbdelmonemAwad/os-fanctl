@@ -1009,6 +1009,12 @@ def floor_for(channel, entry, options, measured):
                          int(taken['not_below'])))
 
     for fan in entry.get('fans') or []:
+        # A fan the table says is not driven has no floor to find: the XGS 3300's two have no
+        # duty register at all, and telling the reader to run the floor test there sent them
+        # after a test nothing on that board can run.
+        if fan.get('channel') == channel and fan.get('drive') is False:
+            return None, str(fan.get('floor_source') or fan.get('drive_reason')
+                             or 'not applicable: not driven')
         if fan.get('channel') == channel and fan.get('floor') is not None:
             if fan.get('confirmed'):
                 return int(fan['floor']), 'from the table: %s' % fan['floor_source']
