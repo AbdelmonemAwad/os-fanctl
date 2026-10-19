@@ -37,7 +37,7 @@ jobs:
     name: syntax
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Python
         run: |
@@ -114,7 +114,7 @@ jobs:
     name: nothing private
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: No real addresses, hardware identifiers or credentials
         run: python3 tools/check-private-data.py .
 
@@ -129,7 +129,7 @@ jobs:
     name: translations
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # The catalogue arrived on 2026-10-17: every string the page and the widget show, with its
       # Arabic, in src/opnsense/scripts/fanctl/i18n/ui. These steps were here before it, so that
