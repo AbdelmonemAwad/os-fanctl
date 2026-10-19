@@ -200,9 +200,23 @@ echo "nothing is controlling a fan yet, and nothing will until you say so on tha
 # already read the old files into memory - and this script will not restart it uninvited.
 # A restart is not free here: it hands the fans back to the hardware, waits, and takes them
 # again, and the right moment for that is the owner's to choose.
+#
+# Except where it holds nothing: in watch-only mode, with no fan driven, a restart hands back
+# nothing and takes nothing, and leaving the old code running is all it saves. Three appliances
+# updated by hand on 2026-10-19 went on naming sensors by their sysctl, the old code's way,
+# until the controller was restarted.
 if /usr/local/etc/rc.d/fanctl status > /dev/null 2>&1; then
-    echo "the controller is still running the code that was installed before this one;"
-    echo "restart it from the page, or with:  configctl fanctl restart"
+    if /usr/local/opnsense/scripts/fanctl/fanctl.py status 2> /dev/null | /usr/local/bin/python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+sys.exit(0 if d.get("mode") == "monitor" and not any(f.get("driven") for f in d.get("fans") or []) else 1)
+'; then
+        configctl fanctl restart > /dev/null 2>&1 || true
+        echo "the controller only watches and holds no fan, so it was restarted onto this code"
+    else
+        echo "the controller is still running the code that was installed before this one;"
+        echo "restart it from the page, or with:  configctl fanctl restart"
+    fi
 fi
 
 # And the one thing worth shouting about, if it is true.
