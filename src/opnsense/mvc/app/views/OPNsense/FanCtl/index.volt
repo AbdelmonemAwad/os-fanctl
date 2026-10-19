@@ -714,8 +714,12 @@
             /* The fade for a thinly watched window goes on the BAND and not on the row: dimming
                the row dims the sensor name and the reading now, neither of which is any less
                certain for the record having been asleep. */
-            bar(low, high, mean, isFinite(now) ? now : null, opts.top, opts.rungs || [],
-                opts.tone || '').toggleClass('fc-thin', thin).appendTo($row);
+            /* No track at all for a row with no scale: an empty bar under a fan turning at
+               7,500 rpm read as a fan that had stopped. */
+            if (opts.top) {
+                bar(low, high, mean, isFinite(now) ? now : null, opts.top, opts.rungs || [],
+                    opts.tone || '').toggleClass('fc-thin', thin).appendTo($row);
+            }
 
             if (window_data && opts.card) {
                 /* the three figures each under its own word, in three even columns */
