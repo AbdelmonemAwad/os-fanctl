@@ -28,7 +28,8 @@ fi
 # and calls its hooks at boot, and one left behind without the plugin's classes is a fatal error
 # that stops rc.bootup before the network - which is what os-frontpanel's did on an XGS 136. The
 # cron entry with it, which would otherwise go on calling a script that is no longer there.
-# the daily self-update first, so that it cannot reinstall half way through this
+# the cron entry of the daily self-update an install before 2026-10-20 had, so that it cannot
+# reinstall half way through this
 rm -f /usr/local/etc/cron.d/fanctl-update
 rm -rf /usr/local/share/os-fanctl
 rm -f /usr/local/etc/inc/plugins.inc.d/fanctl.inc

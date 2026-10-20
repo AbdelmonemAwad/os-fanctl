@@ -3,7 +3,8 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # Copyright (c) 2026 Abdelmonem Awad <eg2@live.com>
 #
-"""Follow os-fanctl's published releases on GitHub. Run once a day by cron (/usr/local/etc/cron.d/fanctl-update).
+"""Follow os-fanctl's published releases on GitHub. Run from XGS: Updates
+(os-xgs-npu's Plugins tab) or by hand; until 2026-10-20 it ran once a day from cron.
 
     self-update.py          take the latest release if it is ahead of what is installed
     self-update.py check    say what it would do, and change nothing
