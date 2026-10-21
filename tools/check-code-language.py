@@ -104,8 +104,8 @@ def main(argv):
     if failures:
         print()
         print('%d line(s) carry Arabic outside a translation file.' % failures)
-        print('Put the English in the source and the Arabic in i18n/ui/ar_SA.json, keyed')
-        print('by that English, so lang._() finds it like every other string.')
+        print("Put the English in the source and the Arabic in opnsense-arabic's ar_SA.po,")
+        print('keyed by that English, so lang._() finds it like every other string.')
         return 1
     print('%d file(s) checked, %d translation files skipped, no Arabic in code.'
           % (checked, exempted))

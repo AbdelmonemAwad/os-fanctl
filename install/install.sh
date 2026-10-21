@@ -53,9 +53,10 @@ chmod 644 /usr/local/opnsense/service/conf/actions.d/actions_fanctl.conf
 # installed.
 chmod 644 /usr/local/opnsense/www/js/widgets/FanCtl.js
 chmod 644 /usr/local/opnsense/www/js/widgets/Metadata/FanCtl.xml
-# The Arabic merge at every boot, and the pkg trigger that runs it when a catalogue is written.
-chmod 755 /usr/local/etc/rc.syshook.d/start/64-fanctl-i18n
-chmod 644 /usr/local/share/pkg/triggers/os-fanctl.ucl
+# The page's Arabic is in opnsense-arabic's catalogue since 2026-10-22, so this plugin merges
+# nothing into it any more. What an earlier install put here for that goes: the copy of the
+# Arabic, its merge, the boot hook and the pkg trigger that ran it, and the merge's record.
+rm -f /usr/local/opnsense/scripts/fanctl/i18n/ui/ar_SA.json     /usr/local/opnsense/scripts/fanctl/merge_ui_translations.py     /usr/local/etc/rc.syshook.d/start/64-fanctl-i18n     /usr/local/share/pkg/triggers/os-fanctl.ucl     /var/db/fanctl/i18n-owned.json
 
 # The controller's log. 0750 because what it logs is what it did to the fans and what the
 # chip answered back, which is diagnostic detail about the hardware.
@@ -170,13 +171,6 @@ PHPTMP=$(php -r "echo (include '${CONFIGPHP}')->application->tempDir;" 2>/dev/nu
 PHPTMP=${PHPTMP:-/var/lib/php/tmp}
 rm -f "${PHPTMP}/opnsense_menu_cache.xml" "${PHPTMP}/opnsense_acl_cache.json"
 
-# GUI strings for every installed language, then reload php so the new catalogues are used.
-# Guarded rather than assumed: a build of this plugin that ships no catalogue of its own is
-# a perfectly good plugin, and the install should not stop because there was nothing to
-# merge.
-if [ -x /usr/local/opnsense/scripts/fanctl/merge_ui_translations.py ]; then
-    echo "translated strings added: $(/usr/local/opnsense/scripts/fanctl/merge_ui_translations.py)"
-fi
 configctl webgui restart > /dev/null 2>&1 || true
 
 # What this install is, for the self-update: the commit, from a git checkout, or from the

@@ -9,7 +9,7 @@
         dashboards it is already on, so it stays "fanctl".
 
         Every string in <translations> is passed through gettext() by the dashboard controller, so
-        the English text here is the msgid the plugin's i18n catalogues translate. Nothing the
+        the English text here is the msgid opnsense-arabic's catalogue translates. Nothing the
         widget prints is written in the JavaScript.
 
         NOTHING inside <translations>, including a comment. The controller does

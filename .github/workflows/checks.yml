@@ -137,9 +137,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # The catalogue arrived on 2026-10-17: every string the page and the widget show, with its
-      # Arabic, in src/opnsense/scripts/fanctl/i18n/ui. These steps were here before it, so that
-      # the day it arrived was not the day somebody forgot to check it.
+      # The list of every string the page and the widget show is in
+      # src/opnsense/scripts/fanctl/i18n/ui/source.json; their Arabic is in opnsense-arabic's
+      # catalogue since 2026-10-22, which check-strings.py reads from its main branch.
       - name: The generated data-string map is current
         run: |
           [ -f tools/gen-data-strings.py ] || { echo "not this plugin"; exit 0; }
@@ -149,17 +149,3 @@ jobs:
         run: |
           [ -f tools/check-strings.py ] || { echo "not this plugin yet"; exit 0; }
           python3 tools/check-strings.py
-          python3 - <<'PY'
-          import glob, json, sys
-          name = sorted(glob.glob('src/opnsense/scripts/*/i18n/ui/source.json'))
-          if not name:
-              print('no catalogue here')
-              sys.exit(0)
-          src = json.load(open(name[0], encoding='utf-8'))
-          ar = json.load(open(name[0].replace('source.json', 'ar_SA.json'), encoding='utf-8'))
-          missing = [k for k in src if k not in ar]
-          for key in missing:
-              print('no Arabic for: %s' % key[:90])
-          print('%d msgids, %d translated' % (len(src), len(ar)))
-          sys.exit(1 if missing else 0)
-          PY
