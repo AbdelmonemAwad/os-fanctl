@@ -58,6 +58,7 @@ rm -rf /usr/local/opnsense/mvc/app/views/OPNsense/FanCtl
 # key, which is what it already does for a widget the user never had.
 rm -f /usr/local/opnsense/www/js/widgets/FanCtl.js
 rm -f /usr/local/opnsense/www/js/widgets/Metadata/FanCtl.xml
+# A version before 2026-10-22 merged its own Arabic from a boot hook and a pkg trigger.
 rm -f /usr/local/etc/rc.syshook.d/start/64-fanctl-i18n
 rm -f /usr/local/share/pkg/triggers/os-fanctl.ucl
 

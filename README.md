@@ -154,14 +154,15 @@ from that side every day, so moving or renaming one of them is caught there; kee
 
 ## In Arabic
 
-Every string the page and the dashboard widget show - 228 on 2026-10-17, of which OPNsense's own
-Arabic catalogue covered 15 before - is in `src/opnsense/scripts/fanctl/i18n/ui/ar_SA.json`, with
-the list of strings in `source.json` beside it. They are merged into the catalogue of each installed
-GUI language the way os-linkhealth merges its own: by the installer and the package, again at every
-boot (`rc.syshook.d/start/64-fanctl-i18n`), and by pkg whenever a package writes a catalogue
-(`src/share/pkg/triggers/os-fanctl.ucl`). A string the catalogue already translates keeps core's
-words. `tools/check-strings.py`, run by the checks, fails when the page or the widget gains a string
-that is not in the catalogue or has no Arabic.
+Every string the page and the dashboard widget show is listed in
+`src/opnsense/scripts/fanctl/i18n/ui/source.json`, and its Arabic is in the one Arabic catalogue of
+the whole GUI, [opnsense-arabic](https://github.com/AbdelmonemAwad/opnsense-arabic)'s `ar_SA.po`,
+since 2026-10-22. ~~They are in `src/opnsense/scripts/fanctl/i18n/ui/ar_SA.json` and merged into
+each installed GUI language's catalogue by the installer, at every boot (`64-fanctl-i18n`) and by a
+pkg trigger~~ - that table, its merge, the boot hook and the trigger are gone, and an install removes
+what an earlier one left. A string added to the page needs its Arabic in opnsense-arabic first:
+`tools/check-strings.py`, run by the checks, reads that catalogue and fails when the page or the
+widget gains a string that is not in `source.json` or has no Arabic there.
 
 ## Updates
 

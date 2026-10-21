@@ -1229,8 +1229,9 @@
 
            A code this page does not know prints nothing rather than guessing,
            and the numbers are still in the table above it. A verdict added
-           later is a string added here and in i18n/ui/source.json, and
-           tools/check-strings.py reports the one that was forgotten.
+           later is a string added here, in i18n/ui/source.json and in
+           opnsense-arabic's catalogue, and tools/check-strings.py reports
+           the one that was forgotten.
            ------------------------------------------------------------------ */
         function fc_num(value) {
             const number = Number(value);
