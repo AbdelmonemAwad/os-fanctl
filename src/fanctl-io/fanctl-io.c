@@ -2007,11 +2007,30 @@ cmd_duty(unsigned channel, unsigned pct)
 	 * there is no window in which the fan is under our value and not yet
 	 * under our intent, and none in which it is under a value the floor
 	 * would have refused.
+	 *
+	 * BUT NOT EVERY CHIP HOLDS THE BYTE UNDER AN AUTOMATIC MODE (issue 3).
+	 * On the XG 330 rev 2, with SYSFAN under SmartFan IV, the duty register
+	 * read back the curve's own output - 0xff written, 0xc8 read, twice - so
+	 * a verified write there could never succeed, the mode was never
+	 * switched, and taking control failed every time. So from an automatic
+	 * mode the duty is written once WITHOUT the read-back, the mode switched
+	 * to manual and checked, and the duty written again and checked. A chip
+	 * that holds the byte is where it always was: if this program dies after
+	 * the switch, the fan is at our duty, at or above the floor. A chip that
+	 * shows the curve's output in the register switches to manual at the
+	 * duty the curve had just chosen, and is given ours a write later.
 	 */
 	mask = hold_signals();
-	ec_write_verify(&id, reg_pwm[channel - 1], raw, 0xff);
-	ec_write_verify(&id, reg_fan_mode[channel - 1],
-	    (uint8_t)((cur_mode_reg & 0x0f) | (MODE_MANUAL << 4)), 0x70);
+	if (cur_mode == MODE_MANUAL) {
+		ec_write_verify(&id, reg_pwm[channel - 1], raw, 0xff);
+		ec_write_verify(&id, reg_fan_mode[channel - 1],
+		    (uint8_t)((cur_mode_reg & 0x0f) | (MODE_MANUAL << 4)), 0x70);
+	} else {
+		ec_write(&id, reg_pwm[channel - 1], raw);
+		ec_write_verify(&id, reg_fan_mode[channel - 1],
+		    (uint8_t)((cur_mode_reg & 0x0f) | (MODE_MANUAL << 4)), 0x70);
+		ec_write_verify(&id, reg_pwm[channel - 1], raw, 0xff);
+	}
 	release_signals(&mask);
 
 	close(lock);
@@ -2169,6 +2188,12 @@ cmd_release(unsigned channel)
 	 *
 	 * When the target is itself manual there is no such order to choose, and
 	 * the duty being written has already been checked against the floor.
+	 *
+	 * Once an automatic mode is back the duty byte is written and NOT read
+	 * back: a chip that shows the curve's output in that register (issue 3,
+	 * SmartFan IV on the XG 330 rev 2) would read back the curve, not the
+	 * byte, and a hand-back that had already succeeded - the mode, checked -
+	 * would be reported as failed.
 	 */
 	mask = hold_signals();
 	if (target_mode == MODE_MANUAL) {
@@ -2176,7 +2201,7 @@ cmd_release(unsigned channel)
 		ec_write_verify(&id, reg_fan_mode[channel - 1], mode_byte, 0x70);
 	} else {
 		ec_write_verify(&id, reg_fan_mode[channel - 1], mode_byte, 0x70);
-		ec_write_verify(&id, reg_pwm[channel - 1], target_duty, 0xff);
+		ec_write(&id, reg_pwm[channel - 1], target_duty);
 	}
 	release_signals(&mask);
 

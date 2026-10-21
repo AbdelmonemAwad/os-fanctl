@@ -55,7 +55,10 @@ exist for that and nothing else:
 * one write per change, never a write per cycle;
 * **every write is read back**, and a read-back that disagrees hands the fans to the hardware. It
   does not retry — a disagreement means a write went somewhere, and the honest response to that is
-  to stop writing.
+  to stop writing. The one exception is the duty byte while the channel is under an automatic
+  mode, written on the way into manual and on the way back out of it: some chips show the curve's
+  own output in that register then, so it would never read back (issue 3). The mode beside it is
+  read back every time, and so is the duty once the channel is manual.
 
 ## 3. Three layers, and this document is about the top one
 
