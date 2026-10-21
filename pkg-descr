@@ -47,6 +47,16 @@ and what is wanted in it is a measurement rather than a datasheet.
 Plugin Changelog
 ================
 
+1.1.1
+
+* Taking over a channel under an automatic mode (SmartFan IV): the mode
+  first, then the duty, read back - before, taking control failed every
+  time on such a channel (issue 3)
+* Handing a channel back to an automatic mode is no longer reported as
+  failed when the chip shows its curve's output
+* The page's Arabic is in opnsense-arabic's catalogue; this plugin merges
+  nothing into the GUI's catalogues any more
+
 1.1
 
 * The page and the widget in Arabic, laid out like OPNsense's own pages,
