@@ -4,3 +4,16 @@
 # command and an rc script would fail in a way nobody would guess from the error.
 * text=auto eol=lf
 *.png binary
+
+# What an appliance carries is the archive of a commit: the tarball the self-update downloads, and
+# what xgs-image-builder puts into an image (its fetch-project.sh takes `git archive`). Nothing an
+# appliance does not read goes into it: the documentation and its pictures, the workflows, the files
+# about the project itself, and the repository's own tools, which run from a checkout here and in
+# CI (2026-10-22). A file an appliance starts to read leaves this list in the same change.
+docs/ export-ignore
+.github/ export-ignore
+CODE_OF_CONDUCT.md export-ignore
+CONTRIBUTING.md export-ignore
+SECURITY.md export-ignore
+DESIGN.md export-ignore
+tools/ export-ignore
