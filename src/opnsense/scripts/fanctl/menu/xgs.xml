@@ -5,11 +5,13 @@
 <menu>
     <!--
         The place used when os-xgs-npu is installed, which is to say on an XGS appliance: the
-        family's pages sit together in its XGS section, after os-xgs-npu's Problem Reports (60).
+        family's pages sit together in its XGS section, after os-xgs-npu's own pages and its logs (Problem Reports 60, Log File 65, Coprocessor
+        Console 66), the family's pages by subject - hardware 70-73, the system 74, protection 76-78,
+        reports 80 - and os-xgs-npu's About last (99).
         The section's name and attributes are os-xgs-npu's own, so the two files make one section.
         place-menu.sh chooses between this file and own.xml.
     -->
     <XGS VisibleName="XGS" cssClass="fa fa-microchip fa-fw" order="35">
-        <FanCtl order="64" VisibleName="Fan Control" url="/ui/fanctl"/>
+        <FanCtl order="71" VisibleName="Fan Control" url="/ui/fanctl"/>
     </XGS>
 </menu>
