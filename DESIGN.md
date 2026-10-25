@@ -308,17 +308,19 @@ src/opnsense/scripts/fanctl/stats.py         arithmetic over the record; opens n
 src/opnsense/scripts/fanctl/probe.py         what is in a machine nobody here has opened
 src/opnsense/scripts/fanctl/response.py      the one question that needs a write
 src/opnsense/scripts/fanctl/policy.py        the curve, read from the machine own limits
+src/opnsense/scripts/fanctl/{place-menu.sh,menu/own.xml,menu/xgs.xml}   the menu place, written at install
 src/etc/cron.d/fanctl                        the sampler, for when the daemon is not running
 src/opnsense/www/js/widgets/FanCtl.js        the dashboard widget
 src/opnsense/www/js/widgets/Metadata/FanCtl.xml
 src/fanctl-io/{fanctl-io.c,Makefile}         the port helper, built on the firewall
 src/etc/fanctl/floor.conf.shadow             the helper own floor file, all lines commented out
-src/opnsense/mvc/app/models/OPNsense/FanCtl/{FanCtl.xml,FanCtl.php,Menu/Menu.xml,ACL/ACL.xml}
+src/opnsense/mvc/app/models/OPNsense/FanCtl/{FanCtl.xml,FanCtl.php,ACL/ACL.xml}
 src/opnsense/mvc/app/controllers/OPNsense/FanCtl/{IndexController.php,forms/general.xml,Api/*.php}
 src/opnsense/mvc/app/views/OPNsense/FanCtl/index.volt
 ```
 
-Menu: **System → Fan Control** (it is about the appliance, not about the network). State in
+Menu: **System → Fan Control** (it is about the appliance, not about the network) -
+**XGS → Fan Control** when os-xgs-npu is installed. State in
 `/var/db/fanctl`: `baseline.json`, `measured.json`, `held.json`, `status.json`, `incident.json`,
 and the helper's own `ch<n>.state`.
 

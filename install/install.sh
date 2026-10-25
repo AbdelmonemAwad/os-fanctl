@@ -100,6 +100,11 @@ done
 # be stopped is a fan that cannot be handed back. sh -n parses it without running a line.
 sh -n /usr/local/etc/rc.d/fanctl || { echo "the rc script does not parse"; exit 1; }
 
+# Where the page goes in the menu: XGS when os-xgs-npu is installed, System when it is not.
+# OPNsense's menu file takes no condition, so place-menu.sh writes it from menu/ and says which.
+chmod 755 /usr/local/opnsense/scripts/fanctl/place-menu.sh
+MENUPLACE=$(/usr/local/opnsense/scripts/fanctl/place-menu.sh)
+
 # The helper that actually touches the ports. It is built here, on the firewall, by the
 # firewall's own clang against the firewall's own headers - which is not a compromise but
 # the reason the approach survives an OPNsense update: it is ordinary userland, it links
@@ -189,7 +194,11 @@ install -d -m 0755 /usr/local/share/os-fanctl
 printf '{"commit": "%s", "date": "%s", "source": "%s", "installed_at": %s}\n' \
     "${REV}" "${RDATE}" "${RSRC}" "$(date +%s)" > /usr/local/share/os-fanctl/installed.json
 
-echo "Fan Control installed: the page is at System > Fan Control"
+if [ "${MENUPLACE}" = xgs ]; then
+    echo "Fan Control installed: XGS > Fan Control"
+else
+    echo "Fan Control installed: System > Fan Control"
+fi
 echo "the widget is at Lobby > Dashboard, under Add widget > Fan Control"
 echo "nothing is controlling a fan yet, and nothing will until you say so on that page"
 

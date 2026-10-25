@@ -41,6 +41,13 @@ if [ -f /usr/local/etc/rc.d/configd ]; then
 	/usr/local/etc/rc.d/configd restart
 fi
 
+# The menu file place-menu.sh wrote is not one of the package's files, so pkg leaves it behind and
+# the menu would keep the entry. Its directory goes with it, and the model's if that is empty now.
+rm -f /usr/local/opnsense/mvc/app/models/OPNsense/FanCtl/Menu/Menu.xml
+rmdir /usr/local/opnsense/mvc/app/models/OPNsense/FanCtl/Menu \
+    /usr/local/opnsense/mvc/app/models/OPNsense/FanCtl 2> /dev/null || true
+rm -f /var/lib/php/tmp/opnsense_menu_cache.xml /tmp/opnsense_menu_cache.xml
+
 # system_cache_flush(): without it the menu keeps a dead entry and the user manager keeps an
 # ACL tag pointing at a page that is not there, for up to an hour each. This block is word for
 # word the +POST_DEINSTALL that opnsense/plugins generates for a plugin with models, and is
