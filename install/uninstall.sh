@@ -48,6 +48,9 @@ rm -f /usr/local/etc/fanctl/floor.conf.shadow
 rmdir /usr/local/etc/fanctl 2> /dev/null || true
 rm -f /usr/local/opnsense/service/conf/actions.d/actions_fanctl.conf
 rm -rf /usr/local/opnsense/scripts/fanctl
+# the menu file place-menu.sh wrote, which no list of the package's files names
+rm -f /usr/local/opnsense/mvc/app/models/OPNsense/FanCtl/Menu/Menu.xml
+rmdir /usr/local/opnsense/mvc/app/models/OPNsense/FanCtl/Menu 2> /dev/null || true
 rm -rf /usr/local/opnsense/mvc/app/models/OPNsense/FanCtl
 rm -rf /usr/local/opnsense/mvc/app/controllers/OPNsense/FanCtl
 rm -rf /usr/local/opnsense/mvc/app/views/OPNsense/FanCtl

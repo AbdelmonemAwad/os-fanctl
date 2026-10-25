@@ -118,7 +118,8 @@ Idempotent: re-run it after an update. Your settings are kept, and so
 are the floor measurements in `/var/db/fanctl` — which matter more than either, because they are
 the only numbers in this plugin that came from hardware rather than from a keyboard.
 
-The page is at **System → Fan Control**. The dashboard panel is under **Add widget → Fan
+The page is at **System → Fan Control** - **XGS → Fan Control** when os-xgs-npu is installed.
+The dashboard panel is under **Add widget → Fan
 Control**. Nothing is controlling a fan when the installer finishes, and nothing will until you
 say so on that page. Once you have, it comes back at every boot: OPNsense starts it from its own
 boot sequence (`plugins_configure('bootup')`), which is where a plugin's daemons are started - the

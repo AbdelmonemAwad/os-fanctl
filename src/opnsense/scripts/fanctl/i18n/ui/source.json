@@ -42,6 +42,7 @@
  "A curve needs at least two points.",
  "The points must rise in temperature: %d C comes after %d C.",
  "Fan Control",
+ "XGS",
  "Last hour",
  "Last day",
  "Last week",

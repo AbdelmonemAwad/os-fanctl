@@ -87,7 +87,9 @@ def used():
                 for child in tr:
                     if child.text and child.text.strip():
                         found.setdefault(' '.join(child.text.split()), rel)
-        elif f.suffix == '.xml' and ('forms' in f.parts or f.name in ('Menu.xml', 'ACL.xml')):
+        # the menu is scripts/fanctl/menu/{own,xgs}.xml, which place-menu.sh writes as Menu.xml
+        elif f.suffix == '.xml' and ('forms' in f.parts or f.name in ('Menu.xml', 'ACL.xml')
+                                     or f.parent.name == 'menu'):
             t = f.read_text(encoding='utf-8')
             for s in re.findall(r'<(?:label|help|name|description)>(.*?)</(?:label|help|name|description)>', t, re.S):
                 found.setdefault(' '.join(s.split()), rel)

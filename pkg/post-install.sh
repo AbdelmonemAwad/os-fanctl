@@ -78,6 +78,15 @@ if [ -x /usr/local/opnsense/scripts/firmware/register.php ]; then
 	/usr/local/opnsense/scripts/firmware/register.php install os-fanctl > /dev/null 2>&1 || true
 fi
 
+# Where the page goes in the menu: XGS when os-xgs-npu is installed, System when it is not.
+# OPNsense's menu file takes no condition, so it is not one of the package's files: place-menu.sh
+# writes it, before the reload below drops the menu cache.
+MENUPLACE=
+if [ -x /usr/local/opnsense/scripts/fanctl/place-menu.sh ]; then
+	MENUPLACE=$(/usr/local/opnsense/scripts/fanctl/place-menu.sh) ||
+	    echo "the menu entry could not be written: run /usr/local/opnsense/scripts/fanctl/place-menu.sh"
+fi
+
 if [ -f /usr/local/etc/rc.configure_plugins ]; then
 	echo "Reloading plugin configuration"
 	/usr/local/etc/rc.configure_plugins POST_INSTALL
@@ -137,7 +146,11 @@ elif [ ! -x /usr/local/opnsense/scripts/fanctl/fanctl-io ]; then
 	echo "      cannot write. Every reading on the Fans tab still works."
 fi
 
-echo "Fan Control installed: the page is at System > Fan Control"
+if [ "${MENUPLACE}" = xgs ]; then
+	echo "Fan Control installed: the page is at XGS > Fan Control"
+else
+	echo "Fan Control installed: the page is at System > Fan Control"
+fi
 echo "nothing is controlling a fan yet, and nothing will until it is turned on there"
 
 # An upgrade leaves a running controller running the code it started with, which is
