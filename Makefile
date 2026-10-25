@@ -3,7 +3,7 @@
 # Copyright (c) 2026 Abdelmonem Awad <eg2@live.com>
 #
 PLUGIN_NAME=		fanctl
-PLUGIN_VERSION=		1.1.1
+PLUGIN_VERSION=		1.1.2
 PLUGIN_COMMENT=		Fan control for appliances whose vendor fan curve is gone
 PLUGIN_MAINTAINER=	eg2@live.com
 
