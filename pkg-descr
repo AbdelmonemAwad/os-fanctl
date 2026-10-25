@@ -47,6 +47,14 @@ and what is wanted in it is a measurement rather than a datasheet.
 Plugin Changelog
 ================
 
+1.1.2
+
+* The page goes in the XGS section when os-xgs-npu is installed - among
+  the appliance's pages, in OPNsense's order - and under System when it is
+  not; os-xgs-npu moves it when it is installed or removed
+* The archive an appliance downloads carries what it reads: the
+  documentation, the workflows and the repository's tools left out
+
 1.1.1
 
 * Taking over a channel under an automatic mode (SmartFan IV): the mode
