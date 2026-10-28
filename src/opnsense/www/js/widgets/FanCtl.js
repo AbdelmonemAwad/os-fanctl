@@ -222,17 +222,31 @@ export default class FanCtl extends BaseTableWidget {
             .sort((a, b) => Number(b.celsius) - Number(a.celsius));
 
         /* The processor's cores as one line, the hottest of them: eight identical bars made this
-           widget the tallest thing on the dashboard and said nothing the hottest one does not. */
-        const cores = sorted.filter((sensor) => String(sensor.kind) === 'cpu_core');
-        if (cores.length < 3) {
-            return sorted;
-        }
-        const lead = Object.assign({}, cores[0], {
-            label: String(this.translations.cores || '%s').replace('%s', this._format(cores.length))
+           widget the tallest thing on the dashboard and said nothing the hottest one does not.
+           The coprocessor's cores and the port PHYs likewise, as the page folds them, and its dies
+           and the Super I/O's inputs: on the XGS 136 they were 22 more lines - four cores, three
+           dies, three inputs and a PHY behind each of twelve ports - where the XGS 3300 has eight
+           lines in all. */
+        const named = (key) => (count) => `${this.translations[key] || ''} (${this._format(count)})`;
+        const fold = {
+            cpu_core: (count) => String(this.translations.cores || '%s').replace('%s', this._format(count)),
+            npu_core: named('npu_cores'),
+            npu_die: named('npu_dies'),
+            phy: named('phys'),
+            board_input: named('board_inputs')
+        };
+        let rows = sorted;
+        Object.keys(fold).forEach((kind) => {
+            const members = rows.filter((sensor) => String(sensor.kind) === kind);
+            if (members.length < 3) {
+                return;
+            }
+            const lead = Object.assign({}, members[0], {label: fold[kind](members.length)});
+            rows = rows
+                .filter((sensor) => String(sensor.kind) !== kind || sensor === members[0])
+                .map((sensor) => (sensor === members[0] ? lead : sensor));
         });
-        return sorted
-            .filter((sensor) => String(sensor.kind) !== 'cpu_core' || sensor === cores[0])
-            .map((sensor) => (sensor === cores[0] ? lead : sensor));
+        return rows;
     }
 
     _fanRow(fan) {
