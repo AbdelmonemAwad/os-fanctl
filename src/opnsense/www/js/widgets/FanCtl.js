@@ -308,7 +308,9 @@ export default class FanCtl extends BaseTableWidget {
 
     _identity(icon, colour, label, aside, tooltip) {
         /* min-width on the row and on the label is what lets a long sysctl name be cut with an
-           ellipsis: a flex item refuses to shrink below its own content until it is told it may. */
+           ellipsis: a flex item refuses to shrink below its own content until it is told it may.
+           The aside does not wrap, so it is the label that gives way: in a column 160 px wide the
+           group was broken into a letter a line, "n", "p", "u", beside every sensor. */
         const tip = (tooltip || []).filter((part) => !!part).join(' - ');
 
         return `
@@ -318,7 +320,7 @@ export default class FanCtl extends BaseTableWidget {
                 <span style="font-weight: bold; min-width: 0; overflow: hidden;
                              text-overflow: ellipsis; white-space: nowrap;"
                       >${this._escape(this._isolate(label || ''))}</span>
-                <span class="text-muted" dir="ltr" style="font-size: 11px;"
+                <span class="text-muted" dir="ltr" style="font-size: 11px; white-space: nowrap;"
                       >${this._escape(this._isolate(aside || ''))}</span>
             </div>`;
     }
@@ -453,6 +455,12 @@ export default class FanCtl extends BaseTableWidget {
     }
 
     _percent(value) {
+        /* Number(null) is 0, and a duty nobody knows is not a duty of 0. The XGS 3300's board
+           drives its fans by its own curve and tells the host only their speed, so both of its
+           fans were drawn as an empty bar marked 0% beside a fan turning at 7,000 rpm. */
+        if (value === null || value === undefined || value === '') {
+            return null;
+        }
         const percent = Number(value);
         return Number.isFinite(percent) ? Math.max(0, Math.min(100, Math.round(percent))) : null;
     }
