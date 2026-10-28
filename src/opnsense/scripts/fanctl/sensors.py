@@ -427,6 +427,12 @@ _CLASSIFY = (
     (re.compile(r'^dev\.octep\.\d+\.temperature\.npu$'), 'npu', 'npu_die'),
     (re.compile(r'^dev\.octep\.\d+\.temperature\.inlet$'), 'inlet', 'ambient'),
     (re.compile(r'^dev\.octep\.\d+\.temperature\.memory$'), 'dimm', 'dimm'),
+    # .switch, .sfp_phy and .module_phy, since os-xgs-npu 2026-10-28: the XGS 3300's port chips - the
+    # switch (88E6193X), the SFP+ cages' PHY (88X5113) and the expansion module's PHY - read on the
+    # coprocessor and held by its driver, as the memory is. Network chips, as a NIC's own sensor is,
+    # and all three port PHYs: the switch's is read through a port's PHY, and as one kind the widget
+    # folds them into one line where there are three, as it folds the XGS 136's twelve.
+    (re.compile(r'^dev\.octep\.\d+\.temperature\.(?:switch|sfp_phy|module_phy)$'), 'nic', 'phy'),
     (re.compile(r'^dev\.npuep\.\d+\.temperature$'), 'npu', 'npu_die'),
     (re.compile(r'^dev\.cpu\.\d+\.temperature$'), 'cpu', 'cpu_core'),
     (re.compile(r'^dev\.coretemp\.'), 'cpu', 'cpu_core'),
@@ -498,6 +504,12 @@ def _label(name, kind):
         return 'inlet air (driver copy)'
     if name.startswith('dev.octep.') and name.endswith('.temperature.memory'):
         return 'coprocessor memory'
+    if name.startswith('dev.octep.') and name.endswith('.temperature.switch'):
+        return 'switch chip'
+    if name.startswith('dev.octep.') and name.endswith('.temperature.sfp_phy'):
+        return 'F1/F2 PHY'
+    if name.startswith('dev.octep.') and name.endswith('.temperature.module_phy'):
+        return 'module PHY'
     if name.startswith('dev.npuep.') and name.endswith('.temperature'):
         return 'NPU SoC (driver copy)'
     if name.startswith('dev.amdtemp.') and len(parts) >= 3:
@@ -771,6 +783,7 @@ _ATTACHED = {
     'drive': 'drive',
     'dimm': 'memory_module',
     'nic': 'nic_die',
+    'phy': 'port_phy',
 }
 
 
