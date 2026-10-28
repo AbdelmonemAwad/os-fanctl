@@ -33,7 +33,9 @@ Everything else comes from primary sources and is marked where it matters.
   (the coprocessor die, which no kernel driver reports) and the inlet air, and both fans as
   tachometers - through the small tool [os-xgs-npu](https://github.com/AbdelmonemAwad/os-xgs-npu)
   installs, which reaches the CPLD over the host's SMBus; watched, not driven, because that
-  board's fan curve has no register the host can write.
+  board's fan curve has no register the host can write. Where the coprocessor's memory module
+  has a temperature sensor, os-xgs-npu's driver holds that reading too, and it is listed as a
+  memory module.
 - **Keeps a record**, once a minute, of every sensor and every fan: the lowest, the highest and
   the time-weighted mean over the last hour, day, week and month, and how long each sensor spent
   above each rung of a fixed ladder. One sample costs 1.4 ms and the whole record is bounded at
