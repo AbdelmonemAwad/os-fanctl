@@ -259,7 +259,7 @@
       "fans": [
         {
           "channel": "CPUFAN",
-          "label": "the fan",
+          "label": "CPU fan",
           "sensors": [
             "cpu",
             "board",

@@ -493,17 +493,17 @@ def _label(name, kind):
     """
     parts = name.split('.')
     if name.startswith('dev.octep.') and name.endswith('.temperature.npu'):
-        return 'NPU (the coprocessor die), as its driver holds it'
+        return 'NPU die (driver copy)'
     if name.startswith('dev.octep.') and name.endswith('.temperature.inlet'):
-        return 'inlet air, as the driver holds it'
+        return 'inlet air (driver copy)'
     if name.startswith('dev.octep.') and name.endswith('.temperature.memory'):
-        return "the coprocessor's memory module, as its driver holds it"
+        return 'coprocessor memory'
     if name.startswith('dev.npuep.') and name.endswith('.temperature'):
-        return 'NPU, the SoC sensor, as its driver holds it'
+        return 'NPU SoC (driver copy)'
     if name.startswith('dev.amdtemp.') and len(parts) >= 3:
         # core0.sensor0 is the processor's own reading on these Ryzen boards, not one core's;
         # the name was the whole sysctl, on the page's hottest card too.
-        return 'processor, as amdtemp reads it'
+        return 'processor (amdtemp)'
     if kind == 'cpu_core' and name.startswith('dev.cpu.'):
         return 'core %s' % parts[2]
     if kind == 'chipset':
@@ -1233,9 +1233,9 @@ def _superio_label(name):
     if name.startswith('SMBUSMASTER'):
         return 'hardware monitor, over SMBus (%s)' % name
     if name.startswith('PECI'):
-        return 'processor, over PECI (%s)' % name
+        return 'processor (PECI %s)' % name
     if name.startswith('PCH_'):
-        return 'from the chipset (%s)' % name
+        return 'chipset (%s)' % name
     return 'hardware monitor pin %s' % name
 
 
@@ -1511,8 +1511,8 @@ def read_cpld():
     except (ValueError, IndexError):
         return entries
     for key, label, group, kind, attached, limit in (
-            ('cpu_c', 'CPU, as the board reads it', 'cpu', 'cpu_board', 'cpu_die', 95.0),
-            ('npu_c', 'NPU (the coprocessor die)', 'npu', 'npu_die', 'coprocessor_die', 100.0),
+            ('cpu_c', 'processor (board)', 'cpu', 'cpu_board', 'cpu_die', 95.0),
+            ('npu_c', 'NPU die', 'npu', 'npu_die', 'coprocessor_die', 100.0),
             ('inlet_c', 'inlet air', 'inlet', 'ambient', 'chassis_inlet', 45.0)):
         celsius = values.get(key)
         if not isinstance(celsius, (int, float)):
@@ -1578,7 +1578,7 @@ def read_npu():
         if parts[0] == 'zone':
             zone = parts[1]
             if zone == 'ap-thermal-ic':
-                label, kind, limit = 'NPU, the SoC sensor', 'npu_die', 100.0
+                label, kind, limit = 'NPU SoC', 'npu_die', 100.0
             elif zone.startswith('ap-thermal-cpu'):
                 label, kind, limit = 'NPU core %s' % zone[len('ap-thermal-cpu'):], 'npu_core', 100.0
             elif zone.endswith('.thermal'):
@@ -1595,7 +1595,7 @@ def read_npu():
                 label, kind, limit = 'NPU %s' % zone, 'npu_other', 100.0
             key, group, attached = 'zone:%s' % zone, 'npu', 'coprocessor_die'
         elif parts[0] == 'phy':
-            label, kind, limit = 'PHY of Port%s' % parts[1], 'phy', 105.0
+            label, kind, limit = 'Port%s PHY' % parts[1], 'phy', 105.0
             key, group, attached = 'phy:%s' % parts[1], 'nic', 'port_phy'
         else:
             continue
