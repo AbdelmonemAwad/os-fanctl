@@ -47,6 +47,23 @@ and what is wanted in it is a measurement rather than a datasheet.
 Plugin Changelog
 ================
 
+1.1.3
+
+* XGS 3300: the coprocessor's memory module named as a memory module, and
+  a node the coprocessor's driver holds empty left out, where it was a
+  warning on the page and 0.0 C on the dashboard (#39)
+* Widget: a fan the board drives (XGS 3300) is drawn on its real speed,
+  live - every ten seconds, on a scale a quarter above the fastest the
+  record has seen - where it was an empty bar marked 0% (#40)
+* Shorter sensor and fan names without "the": CPU fan (XGS 136),
+  processor (amdtemp) and (board), NPU die, NPU SoC, PortN PHY,
+  coprocessor memory; the widget folds coprocessor cores and dies, port
+  PHYs and board inputs into one line each: an XGS 136's twenty-four
+  readings are eight lines (#41)
+* XGS 3300: its port chips - switch chip, F1/F2 PHY and module PHY, read
+  by os-xgs-npu - named and folded as port PHYs (#42)
+* README: what an update does (#38)
+
 1.1.2
 
 * The page goes in the XGS section when os-xgs-npu is installed - among
