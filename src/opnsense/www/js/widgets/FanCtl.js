@@ -196,9 +196,12 @@ export default class FanCtl extends BaseTableWidget {
 
         /* Hottest first: the top line is the sensor the curve would be deciding from. A sensor
            that answered with something that is not a number is dropped rather than drawn at zero,
-           because a bar at the far left is a claim that the machine is cold. */
+           because a bar at the far left is a claim that the machine is cold. Number(null) is 0,
+           so a sensor that answered nothing at all is ruled out before the conversion and not by
+           it: an XGS 3300's memory module with no sensor was drawn at 0.0 C. */
         const sorted = sensors
-            .filter((sensor) => Number.isFinite(Number(sensor && sensor.celsius)))
+            .filter((sensor) => sensor && sensor.celsius !== null && sensor.celsius !== ''
+                && Number.isFinite(Number(sensor.celsius)))
             .slice()
             .sort((a, b) => Number(b.celsius) - Number(a.celsius));
 
