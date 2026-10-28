@@ -61,10 +61,17 @@ export default class FanCtl extends BaseTableWidget {
         super(config);
 
         /* The daemon writes its document once per decision - ten seconds by default - and where
-           it is not running the controller takes the readings itself when asked. Twenty seconds
-           keeps the dashboard within two decisions of the truth without asking a machine that is
-           thinking about its fans to take a second set of readings every tick. */
-        this.tickTimeout = 20;
+           it is not running the controller takes the readings itself when asked. Ten seconds, the
+           daemon's own interval, so every reading it takes is on the dashboard at the next tick:
+           a fan's speed is a live reading, and twenty seconds drew one in two. Asking costs 0.14 s,
+           the board's sensor bank itself under 10 ms (V, XGS 3300, 2026-10-28). */
+        this.tickTimeout = 10;
+
+        /* The fastest each fan has been seen turning, out of the record (trend), which is the
+           scale of a fan drawn on its speed - see _fanRow(). The record is sampled once a minute,
+           so it is asked for once a minute and not every tick. */
+        this.speedHigh = {};
+        this.speedAt = 0;
 
         /* dataChanged() answers "is this the same document as last time", which is not the same
            question as "is the list still on the screen" - see _update(). */
@@ -126,6 +133,15 @@ export default class FanCtl extends BaseTableWidget {
             return;
         }
 
+        if (Date.now() - this.speedAt > 60000) {
+            try {
+                this.speedHigh = this._speedHigh(await this.ajaxCall('/api/fanctl/service/trend'));
+                this.speedAt = Date.now();
+            } catch (error) {
+                /* No record is no scale beyond the reading itself; the speed is still drawn. */
+            }
+        }
+
         try {
             this._update(status);
         } catch (error) {
@@ -161,7 +177,7 @@ export default class FanCtl extends BaseTableWidget {
 
         /* A document identical to the last one still has to be drawn when the list is not on the
            screen - the first tick after a resize, or after an empty sweep emptied the table. */
-        const shape = {fans: fans, readings: readings, curve: status.curve || {}};
+        const shape = {fans: fans, readings: readings, curve: status.curve || {}, speed: this.speedHigh};
         if (!this.dataChanged('fanctl-readings', shape) && this.listed) {
             return;
         }
@@ -239,8 +255,22 @@ export default class FanCtl extends BaseTableWidget {
             ? `${this._format(rpm)} ${this.translations.unit_rpm}`
             : this.translations.state_silent;
 
+        if (duty === null && rpm > 0) {
+            /* No duty - a board that keeps its own curve - so the bar is drawn from the speed, as
+               the page draws it: the fan's real speed, moving with every reading. Its scale is
+               the page's too, a quarter above the fastest the record has seen this fan turning, or
+               the reading now if that is faster; nothing here knows what the fan can do, so the
+               end of the bar is not its maximum and the tooltip says what it is. */
+            const high = Math.max(rpm, Number(this.speedHigh[fan.channel]) || 0);
+            const tip = String(this.translations.speed_scale || '')
+                .replace('%s', `${this._format(high)} ${this.translations.unit_rpm}`);
+            const reading = `<span dir="ltr" class="text-muted">${this._escape(speed)}</span>`;
+
+            return [name, this._measure(reading, tip, (rpm / (high * 1.25)) * 100, null, 'text-muted')];
+        }
+
         if (duty === null) {
-            /* No duty, so no bar, and the tachometer is the whole of the line. */
+            /* No duty and no speed: the tachometer's word is the whole of the line. */
             return [name, `
                 <div style="display: flex; align-items: center; justify-content: flex-end; min-width: 0;">
                     <span dir="ltr" class="text-muted">${this._escape(speed)}</span>
@@ -452,6 +482,27 @@ export default class FanCtl extends BaseTableWidget {
     _rpm(fan) {
         const rpm = Number(fan && fan.rpm);
         return Number.isFinite(rpm) && rpm > 0 ? rpm : 0;
+    }
+
+    _speedHigh(trend) {
+        /* Per channel, the highest of its speed series (R|channel) over every window the record
+           holds - an hour up to a month - so the scale does not shrink when a fast hour leaves
+           the shortest one. */
+        const high = {};
+        const series = (trend && trend.series) || {};
+        Object.keys(series).forEach((key) => {
+            if (key.indexOf('R|') !== 0) {
+                return;
+            }
+            const windows = (series[key] && series[key].windows) || {};
+            Object.keys(windows).forEach((window) => {
+                const max = Number(windows[window] && windows[window].max);
+                if (Number.isFinite(max) && max > (high[key.slice(2)] || 0)) {
+                    high[key.slice(2)] = max;
+                }
+            });
+        });
+        return high;
     }
 
     _percent(value) {

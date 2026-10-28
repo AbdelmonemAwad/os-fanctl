@@ -227,6 +227,7 @@
  "At or above the limit, where the fans go to full speed",
  "Above the panic point - the plugin hands the fans back here",
  "Scale ends at the panic point, %s; the mark is the limit, %s",
+ "Scale ends a quarter above the fastest this fan has been seen turning, %s",
  "No fan or temperature readings yet.",
  "The readings are from %s and are no longer being updated.",
  "Could not read the fan control status.",

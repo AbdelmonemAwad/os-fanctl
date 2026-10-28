@@ -50,6 +50,11 @@
         cores       The processor's cores as one line, the hottest of them, with their count: on
                     these machines every core reads the same, and one bar per core made this the
                     tallest widget on the dashboard.
+
+        speed_scale The tooltip of a fan drawn on its speed, where the board keeps its own curve
+                    and no duty is known. The end of that bar is not the fan's maximum - nothing
+                    here knows it - but a quarter above the fastest the record has seen it turn,
+                    the page's own scale for it.
     -->
     <fanctl>
         <filename>FanCtl.js</filename>
@@ -73,6 +78,7 @@
             <over_limit>At or above the limit, where the fans go to full speed</over_limit>
             <over_panic>Above the panic point - the plugin hands the fans back here</over_panic>
             <scale>Scale ends at the panic point, %s; the mark is the limit, %s</scale>
+            <speed_scale>Scale ends a quarter above the fastest this fan has been seen turning, %s</speed_scale>
             <cores>processor cores (%s)</cores>
             <nodata>No fan or temperature readings yet.</nodata>
             <stale>The readings are from %s and are no longer being updated.</stale>
