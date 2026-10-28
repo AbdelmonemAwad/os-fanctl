@@ -422,8 +422,11 @@ def _limit_name(name):
 _CLASSIFY = (
     # os-xgs-npu's copies of the coprocessor's readings, held by its drivers for OPNsense's own
     # temperature widget - see _MIRRORS. Unclassified they were 'other', named by their sysctl.
+    # .memory, since os-xgs-npu #858, is the coprocessor's memory module where it has a sensor:
+    # a memory module like any other, so the page names it as it names one.
     (re.compile(r'^dev\.octep\.\d+\.temperature\.npu$'), 'npu', 'npu_die'),
     (re.compile(r'^dev\.octep\.\d+\.temperature\.inlet$'), 'inlet', 'ambient'),
+    (re.compile(r'^dev\.octep\.\d+\.temperature\.memory$'), 'dimm', 'dimm'),
     (re.compile(r'^dev\.npuep\.\d+\.temperature$'), 'npu', 'npu_die'),
     (re.compile(r'^dev\.cpu\.\d+\.temperature$'), 'cpu', 'cpu_core'),
     (re.compile(r'^dev\.coretemp\.'), 'cpu', 'cpu_core'),
@@ -468,6 +471,13 @@ def _mirror_of(name):
     return None
 
 
+# Every node those drivers hold, the copies above and the memory module's, which copies nothing
+# this file reads. A node of theirs with nothing in it is the driver refusing on purpose - no
+# reading yet, a feeder that stopped, or a memory module with no sensor (octep.c,
+# octep_sysctl_temp, answers ENOENT so that no number is shown) - and not a sensor that failed.
+_HELD = re.compile(r'^dev\.(?:octep\.\d+\.temperature\.\w+|npuep\.\d+\.temperature)$')
+
+
 def _classify(name):
     for pattern, group, kind in _CLASSIFY:
         if pattern.match(name):
@@ -486,6 +496,8 @@ def _label(name, kind):
         return 'NPU (the coprocessor die), as its driver holds it'
     if name.startswith('dev.octep.') and name.endswith('.temperature.inlet'):
         return 'inlet air, as the driver holds it'
+    if name.startswith('dev.octep.') and name.endswith('.temperature.memory'):
+        return "the coprocessor's memory module, as its driver holds it"
     if name.startswith('dev.npuep.') and name.endswith('.temperature'):
         return 'NPU, the SoC sensor, as its driver holds it'
     if name.startswith('dev.amdtemp.') and len(parts) >= 3:
@@ -1735,6 +1747,16 @@ def read(catalogue=None, include_drives=False, include_superio=False,
     sensors = [s for s in sensors if _mirror_of(s['name']) not in read_here]
     unreadable = [n for n in unreadable if _mirror_of(n) not in read_here]
     unreadable_why = [u for u in unreadable_why if _mirror_of(u['name']) not in read_here]
+
+    # And a node those drivers hold empty is left out, where it was a warning that it "did not
+    # answer this time": on the XGS 3300 whose memory module has no sensor, every time, on the
+    # page, and at 0.0 C on the dashboard. Only empty - a node that answered something this file
+    # cannot read is still the warning it always was.
+    empty = {s['name'] for s in sensors
+             if s.get('unreadable') == 'absent' and _HELD.match(str(s['name']))}
+    sensors = [s for s in sensors if s['name'] not in empty]
+    unreadable = [n for n in unreadable if n not in empty]
+    unreadable_why = [u for u in unreadable_why if u['name'] not in empty]
 
     # Confidence, last, because it is the only part that needs history.
     at = time.time()
