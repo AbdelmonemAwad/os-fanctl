@@ -12,6 +12,6 @@
         a number invented here would only push Fan Control somewhere no one expects it.
     -->
     <System>
-        <FanCtl VisibleName="Fan Control" cssClass="fa fa-snowflake-o fa-fw" url="/ui/fanctl"/>
+        <FanCtl VisibleName="Fan Control" cssClass="fa fa-fan fa-fw" url="/ui/fanctl"/>
     </System>
 </menu>

@@ -12,6 +12,6 @@
         place-menu.sh chooses between this file and own.xml.
     -->
     <XGS VisibleName="XGS" cssClass="fa fa-microchip fa-fw" order="35">
-        <FanCtl order="51" VisibleName="Fan Control" url="/ui/fanctl"/>
+        <FanCtl order="51" VisibleName="Fan Control" cssClass="fa fa-fan fa-fw" url="/ui/fanctl"/>
     </XGS>
 </menu>
