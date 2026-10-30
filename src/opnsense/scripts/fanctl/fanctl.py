@@ -392,6 +392,7 @@ def settings(root=None):
         'sensors': defaults.get('sensors', 'cpu,pch,acpi'),
         'channels': '',
         'accept_unmeasured': False,
+        'board_curve': 'standard',
     }
 
     if root is None:
@@ -413,6 +414,8 @@ def settings(root=None):
 
     mode = (text('mode', values['mode']) or '').strip()
     values['mode'] = mode if mode in ('monitor', 'curve', 'manual') else 'monitor'
+    board = (text('board_curve', values['board_curve']) or '').strip()
+    values['board_curve'] = board if board in ('standard', 'quiet') else 'standard'
 
     for name in ('points', 'sensors', 'channels'):
         found = text(name)
@@ -855,6 +858,169 @@ def cpld_tach():
         if isinstance(values.get(key), int):
             found[name] = values[key]
     return found
+
+
+# THE AMDA0202 BOARD'S TWO CURVES (2026-10-30). On the XGS 2100, 2300, 3100 and 3300 the CPLD drives
+# both fans itself, on the CPU's temperature - measured on an XGS 3300, about 7,200 rpm at rest and
+# 13,500 under full CPU load - and neither of its faces has a duty register. What it does take is one
+# input: the coprocessor's GPIO 48, which the vendor's 1US startup script, in its GPL sources, drives
+# low on the 2100 and 2300 for the CPLD's "low fan speed mode" and leaves to the baseboard's pull-up on
+# every other assembly. Driven low on the 3300 the fans went to about 5,400 rpm at rest and still rose
+# with heat. So the one choice there is to make is which curve runs, made through os-xgs-npu's
+# npu-run.sh on the coprocessor's own Linux.
+#
+# Reconciled, not set once: the coprocessor lets go of the line whenever it restarts - with the host,
+# or taken up again in place - so cron asks every minute, and Apply at once. Only what this plugin set
+# is undone: the line's state before the first change is kept, so a 2100 or 2300, whose coprocessor
+# drives it low itself, stays low when the setting goes back to standard. And the quiet curve gives
+# way to the standard one while the coprocessor reads npu_hot_c or more, until it is below npu_cool_c:
+# the lower curve is the vendor's choice for the 2xxx series, and on a 3xxx it has been watched for
+# minutes, not under a long load.
+NPU_RUN = '/usr/local/opnsense/scripts/xgs/npu-run.sh'
+CPLD_SENSORS = '/usr/local/sbin/xgs3300-sensors'
+BOARD_CURVE = os.path.join(STATE_DIR, 'board-curve.json')
+
+
+def _npu_run(command, seconds=20):
+    """(rc, output) of one command on the coprocessor's Linux, through os-xgs-npu's npu-run.sh."""
+    if not os.access(NPU_RUN, os.R_OK):
+        return 127, "os-xgs-npu's npu-run.sh is not installed"
+    try:
+        done = subprocess.run(['/bin/sh', NPU_RUN, str(seconds), command], capture_output=True,
+                              text=True, timeout=seconds + 30)
+    except (OSError, subprocess.SubprocessError) as failure:
+        return 1, str(failure)
+    return done.returncode, (done.stdout or '').strip()
+
+
+def _board_line(line):
+    """'output' or 'input' for the coprocessor's GPIO line, as gpioinfo reports it; None without an answer."""
+    rc, out = _npu_run('gpioinfo gpiochip0 | grep -E "line +%d:"' % line)
+    if rc != 0:
+        return None
+    for word in out.split():
+        if word in ('output', 'input'):
+            return word
+    return None
+
+
+def _npu_celsius():
+    """The coprocessor's temperature as the CPLD reads it, or None."""
+    if not os.access(CPLD_SENSORS, os.X_OK):
+        return None
+    try:
+        done = subprocess.run([CPLD_SENSORS, 'json'], capture_output=True, text=True, timeout=10)
+        value = json.loads(done.stdout.strip().splitlines()[-1]).get('npu_c')
+        return float(value) if value is not None else None
+    except (OSError, subprocess.SubprocessError, ValueError, IndexError, TypeError, AttributeError):
+        return None
+
+
+def board_curve():
+    """Bring the board's own curve to the one the settings ask for, where the table says the board has
+    two; a document for the page and for whoever ran it."""
+    key, entry = match_model()
+    spec = entry.get('board_curve')
+    if not spec:
+        return {'status': 'ok', 'available': False, 'model': key}
+    try:
+        line = int(spec.get('line', 48))
+        hot = float(spec.get('npu_hot_c', 85))
+        cool = float(spec.get('npu_cool_c', 78))
+    except (TypeError, ValueError):
+        return {'status': 'failed', 'available': True, 'model': key, 'detail': "the table's board_curve block does not read"}
+    options = settings()
+    asked = 'quiet' if options['enabled'] and options['board_curve'] == 'quiet' else 'standard'
+    state = read_json(BOARD_CURVE, {}) or {}
+    held = bool(state.get('held_by_heat'))
+    npu = _npu_celsius()
+    if asked == 'quiet':
+        if npu is not None and npu >= hot and not held:
+            held = True
+            log('board curve: the coprocessor reads %.1f C - the standard curve until it is below %.0f C'
+                % (npu, cool), syslog.LOG_WARNING)
+        elif held and npu is not None and npu < cool:
+            held = False
+            log('board curve: the coprocessor reads %.1f C - the quiet curve again' % npu)
+    else:
+        held = False
+    want = 'quiet' if asked == 'quiet' and not held else 'standard'
+    document = {'status': 'ok', 'available': True, 'model': key, 'asked': asked, 'running': want,
+                'held_by_heat': held, 'npu_c': npu, 'line': line}
+
+    # Standard, and nothing of this plugin's to undo: the coprocessor is not even asked.
+    if want == 'standard' and state.get('set') != 'quiet':
+        if state.get('held_by_heat') != held:
+            state['held_by_heat'] = held
+            write_json(BOARD_CURVE, state)
+        return document
+
+    now = _board_line(line)
+    if now is None:
+        document.update({'status': 'failed', 'detail': 'the coprocessor did not answer; the next minute asks again'})
+        return document
+    if want == 'quiet':
+        if state.get('set') != 'quiet':
+            state['before'] = now
+        if now != 'output':
+            rc, out = _npu_run('gpioset gpiochip0 %d=0' % line)
+            now = _board_line(line)
+            if now != 'output':
+                document.update({'status': 'failed',
+                                 'detail': 'GPIO %d did not take the quiet curve (%s)' % (line, out or rc)})
+                return document
+            log("board curve: quiet - the coprocessor's GPIO %d driven low" % line)
+        state['set'] = 'quiet'
+    else:
+        if state.get('before', 'input') == 'input' and now == 'output':
+            _npu_run('gpioget gpiochip0 %d > /dev/null' % line)
+            now = _board_line(line)
+            if now != 'input':
+                document.update({'status': 'failed', 'detail': 'GPIO %d was not given back' % line})
+                return document
+            log("board curve: standard - the coprocessor's GPIO %d given back to the board" % line)
+        state['set'] = 'standard'
+    state.update({'held_by_heat': held, 'at': int(time.time())})
+    write_json(BOARD_CURVE, state)
+    document['gpio'] = now
+    return document
+
+
+def live_board_fans(fans, entry):
+    """The speed of this second, and the measured top, on the fans of a board that runs them itself.
+
+    The page's cards read the daemon's last document, which is up to one decision old - ten seconds
+    by default - and on 2026-10-30 they showed 6,900 rpm while the CPLD read 6,600. The CPLD's
+    tachometers are on the host's SMBus, away from every chip the daemon talks to, and read in
+    milliseconds, so they are read again here on every request; a Super I/O fan is not, because a
+    read from outside the daemon would race its writes on the same two ports (see sysctl_tach).
+    And where the table knows a fan's top - rpm_max, measured - it goes with the fan, so the page
+    scales the fan's bar on it rather than on the highest the window happens to hold."""
+    tops = {}
+    for spec in entry.get('fans') or []:
+        if spec.get('rpm_max'):
+            tops[str(spec.get('channel'))] = spec['rpm_max']
+    live = cpld_tach() if any(str(fan.get('channel')) in ('FAN0', 'FAN1') for fan in fans) else {}
+    for fan in fans:
+        name = str(fan.get('channel'))
+        if name in live:
+            fan['rpm'] = live[name]
+            fan['live'] = True
+        if name in tops:
+            fan['rpm_max'] = tops[name]
+
+
+def board_curve_status(entry=None, options=None):
+    """What the page shows of the board's curve, read from the last reconcile - never the coprocessor."""
+    if entry is None:
+        entry = match_model()[1]
+    if not entry.get('board_curve'):
+        return {'available': False}
+    options = options if options is not None else settings()
+    state = read_json(BOARD_CURVE, {}) or {}
+    return {'available': True, 'setting': options['board_curve'], 'enabled': options['enabled'],
+            'set': state.get('set') or 'untouched', 'held_by_heat': bool(state.get('held_by_heat')),
+            'at': state.get('at')}
 
 
 def sysctl_tach():
@@ -2586,6 +2752,9 @@ def status():
     document = read_json(STATUS)
     if running and document and (time.time() - document.get('at', 0)) < STATUS_MAX_AGE:
         document['service'] = {'running': True, 'pid': running}
+        entry = match_model()[1]
+        live_board_fans(document.get('fans') or [], entry)
+        document['board_curve'] = board_curve_status(entry)
         return document
 
     options = settings()
@@ -2643,6 +2812,7 @@ def status():
              ('the service is running but has not written a reading at all yet, so these were '
               'taken by this page instead.')) if running else ''
 
+    live_board_fans(fans, entry)
     return {
         'status': 'ok',
         'at': time.time(),
@@ -2663,6 +2833,7 @@ def status():
         'temperatures': reading,
         'incident': read_json(INCIDENT),
         'service': {'running': bool(running), 'pid': running},
+        'board_curve': board_curve_status(entry, options),
     }
 
 
@@ -2803,6 +2974,10 @@ def main(argv):
             _print(probe())
         elif verb == 'status':
             _print(status())
+        elif verb == 'board-curve':
+            result = board_curve()
+            _print(result)
+            return 0 if result['status'] == 'ok' else 1
         elif verb == 'diagnostics':
             _print(diagnostics())
         elif verb == 'restore':

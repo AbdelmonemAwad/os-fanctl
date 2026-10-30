@@ -47,6 +47,19 @@ and what is wanted in it is a measurement rather than a datasheet.
 Plugin Changelog
 ================
 
+1.1.6
+
+* Board fan curve: on a board built on AMDA0202 - the XGS 2100, 2300,
+  3100 and 3300 - the CPLD's lower fan curve, the one the vendor uses on
+  the 2100 and 2300, selected through the coprocessor's GPIO 48; set
+  again within a minute when the coprocessor restarts, and given up for
+  the standard curve while the coprocessor reads 85 C or more
+* The XGS 3300's entry is the whole AMDA0202 board's, matched on the
+  assembly number in its serial, so the XGS 3100 is known
+* The fans of that board read again on every refresh of the page, the
+  speed of that second, one card a fan, each bar scaled on the measured
+  top of 13,500 rpm
+
 1.1.5
 
 * A release workflow, as the other plugins have: every release carries

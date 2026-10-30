@@ -190,11 +190,11 @@
       ]
     },
     "sophos-xgs-3300": {
-      "display": "Sophos XGS 3300",
+      "display": "Sophos XGS 2100, 2300, 3100 and 3300 (board AMDA0202)",
       "match": {
         "maker": "^Sophos$",
         "product": "^XGS$",
-        "version": "^(17|3300r1)$"
+        "serial": "AMDA0202-"
       },
       "verify": {
         "channels": [
@@ -203,7 +203,7 @@
         ]
       },
       "control": false,
-      "control_reason": "This board keeps its own fan curve. Its two fans are read as tachometers through the CPLD over the host's SMBus (os-xgs-npu's sensor tool, measured 2026-10-13: 6,600 to 7,200 rpm), and that face has no duty register - the vendor's own library reads speeds and clears a flag and writes nothing else. Watched, never driven, and nothing here can change that.",
+      "control_reason": "This board drives its two fans itself, on the CPU's temperature: measured on an XGS 3300 on 2026-10-30, about 7,200 rpm at rest and 13,500 under full CPU load, read as tachometers through the CPLD over the host's SMBus (os-xgs-npu's sensor tool). Neither face of the CPLD has a duty register, so nothing here drives a fan. What can be chosen is which of the board's two curves runs - its standard one, or the lower one the vendor uses on the 2100 and 2300, about 5,400 rpm at rest and still rising with heat - through the coprocessor's GPIO 48: Board fan curve, on the Settings tab.",
       "fans": [
         {
           "channel": "FAN0",
@@ -214,10 +214,12 @@
             "inlet"
           ],
           "drive": false,
-          "drive_reason": "no duty register on this board's CPLD face; a tachometer only",
+          "drive_reason": "driven by the board on its own curve; no duty register - which curve runs is chosen under Board fan curve",
           "floor": null,
           "floor_source": "not applicable: not driven",
-          "tach": "turning"
+          "tach": "turning",
+          "rpm_max": 13500,
+          "rpm_max_source": "measured on an XGS 3300, 2026-10-30: 13,200-13,500 rpm held for two minutes under full load on every host core"
         },
         {
           "channel": "FAN1",
@@ -228,12 +230,21 @@
             "inlet"
           ],
           "drive": false,
-          "drive_reason": "no duty register on this board's CPLD face; a tachometer only",
+          "drive_reason": "driven by the board on its own curve; no duty register - which curve runs is chosen under Board fan curve",
           "floor": null,
           "floor_source": "not applicable: not driven",
-          "tach": "turning"
+          "tach": "turning",
+          "rpm_max": 13500,
+          "rpm_max_source": "measured on an XGS 3300, 2026-10-30: 13,200-13,500 rpm held for two minutes under full load on every host core"
         }
-      ]
+      ],
+      "board_curve": {
+        "line": 48,
+        "npu_hot_c": 85,
+        "npu_cool_c": 78,
+        "how": "The coprocessor's GPIO 48, the CPLD_INT_L pin, which the vendor's 1US startup script in its GPL sources drives low on assemblies AMDA0202-0001 and -0002 (the 2100 and 2300) for the CPLD's low fan speed mode, and leaves to the baseboard's pull-up on every other one. Driven low, the lower curve; given back as an input, the board's standard one.",
+        "measured": "XGS 3300 (AMDA0202-0004, CPLD 05.00.08), 2026-10-30: standard 6,900-7,200 rpm at rest, 13,200-13,500 held for two minutes under full load on every host core with the CPU at its 100 C limit; quiet 5,400-5,700 at rest and 8,100 after a 3 s burst; either change within 5 s, and the line given back restores the standard curve within 10 s. The CPLD's bank on both faces read the same in either curve: no register reports or sets it."
+      }
     },
     "sophos-xgs-136": {
       "display": "Sophos XGS 136",

@@ -50,6 +50,24 @@
                 </OptionValues>
             </mode>
             <!--
+                Which of its own two curves a board that drives its fans itself runs (2026-10-30).
+                Only the AMDA0202 board has two today - the XGS 2100, 2300, 3100 and 3300, whose
+                CPLD drives both fans on the CPU's temperature and has no duty register - and the
+                table says so in its board_curve block; on any other machine this does nothing.
+                Standard is whatever the board's own software chose, which is not touched; quiet
+                drives the coprocessor's GPIO 48 low, as the vendor does on the 2100 and 2300. It
+                is applied only while the plugin is enabled. fanctl.py reads it without this
+                model (settings()) and refuses anything but these two.
+            -->
+            <board_curve type="OptionField">
+                <Required>Y</Required>
+                <Default>standard</Default>
+                <OptionValues>
+                    <standard>Standard - the curve the board chose itself</standard>
+                    <quiet>Quiet - the lower curve of the same board</quiet>
+                </OptionValues>
+            </board_curve>
+            <!--
                 Which channels the daemon may drive, by the name the chip gives them. Empty
                 is the default and empty means none: a list that defaulted to "everything the
                 probe found" would drive a header with nothing on it the first time somebody

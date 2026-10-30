@@ -54,7 +54,20 @@ Everything else comes from primary sources and is marked where it matters.
   (the coprocessor die, which no kernel driver reports) and the inlet air, and both fans as
   tachometers - through the small tool [os-xgs-npu](https://github.com/AbdelmonemAwad/os-xgs-npu)
   installs, which reaches the CPLD over the host's SMBus; watched, not driven, because that
-  board's fan curve has no register the host can write. Where the coprocessor's memory module
+  board's fan curve has no register the host can write. ~~That was the end of it~~ It has a
+  choice, though (since 1.1.6, 2026-10-30): the CPLD drives both fans on the CPU's temperature -
+  measured on an XGS 3300, 6,900-7,200 rpm at rest and 13,200-13,500 held for two minutes under
+  full load on every host core - and it has a second, lower curve, which the vendor's own startup
+  script in its GPL sources selects on the XGS 2100 and 2300 through the coprocessor's GPIO 48.
+  **Board fan curve** on the Settings tab selects it on any board built on AMDA0202 - the XGS
+  2100, 2300, 3100 and 3300 - while the plugin is enabled: 4,800-5,400 rpm at rest on the 3300,
+  still rising with heat (8,100 after a three-second burst on every core), the coprocessor about
+  5 C warmer at rest (76.5 against 70-72 C). It is set again within a minute whenever the
+  coprocessor restarts - measured across a reboot: three minutes after it, when the coprocessor's
+  link was up - and gives way to the standard curve while the coprocessor reads 85 C or more,
+  until it is below 78 C. The board's fans are read again from the CPLD on every refresh of the
+  page, so its cards show the speed of that second, one card a fan, and the bar's top is the
+  measured 13,500. Where the coprocessor's memory module
   has a temperature sensor, os-xgs-npu's driver holds that reading too, and it is listed as a
   memory module.
 - **Keeps a record**, once a minute, of every sensor and every fan: the lowest, the highest and

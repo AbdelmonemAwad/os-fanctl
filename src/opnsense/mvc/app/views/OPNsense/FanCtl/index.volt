@@ -375,6 +375,8 @@
         function draw_vitals() {
             const cells = ['#fc-vital-heat', '#fc-vital-air', '#fc-vital-custody'];
             if (!is_object(state_doc)) {
+                $('.fc-vital-fan-extra').remove();
+                $('#fc-vital-air').find('.fc-vital-key').text("{{ lang._('Fans') }}");
                 cells.forEach(function (id) {
                     $(id).removeClass('fc-hot').removeAttr('title');
                     $(id).find('.fc-vital-value').empty().text('—');
@@ -431,11 +433,12 @@
                 $heat_sub.text(said.join(', '));
             }
 
-            /* Air. The fastest channel that reports a speed, and a count of the ones that report
-               none - which on this appliance is four of five, and is not four stopped fans. */
+            /* Air. A card for each fan that reports a speed - two on a board with two fans
+               (2026-10-30: the one card showed the faster of the two and "and 1 more") - and a
+               count, under the first, of the channels that report none, which on the reference
+               appliance is four of five, and is not four stopped fans. */
             const fans = $.isArray(state_doc.fans) ? state_doc.fans : [];
-            let loudest = null;
-            let reporting = 0;
+            const turning = [];
             const quiet = [];
             fans.forEach(function (fan) {
                 const rpm = Number(fan.rpm);
@@ -443,41 +446,51 @@
                     quiet.push(String(fan.channel || ''));
                     return;
                 }
-                reporting += 1;
-                if (loudest === null || rpm > Number(loudest.rpm)) {
-                    loudest = fan;
-                }
+                turning.push(fan);
             });
 
-            const $air_value = $('#fc-vital-air').find('.fc-vital-value').empty();
-            const $air_sub = $('#fc-vital-air').find('.fc-vital-sub').empty();
-            if (loudest === null) {
-                $air_value.append(value(null, '', ''));
-                $air_sub.text(quiet.length
+            $('.fc-vital-fan-extra').remove();
+            const $air = $('#fc-vital-air');
+            $air.find('.fc-vital-key').text("{{ lang._('Fans') }}");
+            if (!turning.length) {
+                $air.find('.fc-vital-value').empty().append(value(null, '', ''));
+                $air.find('.fc-vital-sub').empty().text(quiet.length
                     ? fc_fill("{{ lang._('{count} channels report no fan:') }}",
                         {count: quiet.length}) + ' ' + quiet.join(', ')
                     : '');
             } else {
-                $air_value.text(fc_num(loudest.rpm) + unit_suffix('rpm'));
-                /* Every field on this line is printed only if the document carried it.
-                   String(undefined) is the word undefined, and a reader who is told that
-                   undefined is turning at 5113 rpm has been told nothing twice. */
-                const said = [];
-                if (loudest.channel !== null && loudest.channel !== undefined
-                        && loudest.channel !== '') {
-                    said.push(String(loudest.channel));
-                }
-                if (loudest.duty !== null && loudest.duty !== undefined) {
-                    said.push(String(loudest.duty) + '%');
-                }
-                if (loudest.label && loudest.label !== 'unknown') {
-                    said.push(String(loudest.label));
-                }
-                if (reporting > 1) {
-                    said.push(fc_fill("{{ lang._('and {count} more') }}",
-                        {count: reporting - 1}));
-                }
-                $air_sub.text(said.join(', '));
+                let $after = $air;
+                turning.forEach(function (fan, index) {
+                    const $card = index === 0 ? $air
+                        : $air.clone().removeAttr('id').addClass('fc-vital-fan-extra').insertAfter($after);
+                    $after = $card;
+                    if (turning.length > 1) {
+                        /* the table's label, "fan 0", read as its number; a channel name otherwise */
+                        const label = String(fan.label || '');
+                        const number = /^fan\s*(\d+)$/i.exec(label);
+                        $card.find('.fc-vital-key').text(fc_fill("{{ lang._('Fan {name}') }}",
+                            {name: number ? number[1] : (label && label !== 'unknown' ? label : String(fan.channel || ''))}));
+                    }
+                    $card.find('.fc-vital-value').empty().text(fc_num(fan.rpm) + unit_suffix('rpm'));
+                    /* Every field on this line is printed only if the document carried it.
+                       String(undefined) is the word undefined, and a reader who is told that
+                       undefined is turning at 5113 rpm has been told nothing twice. */
+                    const said = [];
+                    if (fan.channel !== null && fan.channel !== undefined && fan.channel !== '') {
+                        said.push(String(fan.channel));
+                    }
+                    if (fan.duty !== null && fan.duty !== undefined) {
+                        said.push(String(fan.duty) + '%');
+                    }
+                    if (turning.length === 1 && fan.label && fan.label !== 'unknown') {
+                        said.push(String(fan.label));
+                    }
+                    if (Number(fan.rpm_max) > 0) {
+                        said.push(fc_fill("{{ lang._('top speed {rpm} rpm, measured') }}",
+                            {rpm: fc_num(fan.rpm_max)}));
+                    }
+                    $card.find('.fc-vital-sub').empty().text(said.join(', '));
+                });
             }
 
             /* Custody. Four fields on one line and no fifth word invented out of them: whether
@@ -1924,8 +1937,10 @@
                     ? fan.output : fan.duty;
                 /* A tachometer with no duty behind it - a board that keeps its own curve - is
                    drawn on its speed, its record the speed's: the row was a dash and an empty bar
-                   over a fan turning at 7,500 rpm, which read as a fan nobody could read. No bar
-                   for the speed, by the footer's rule: nothing here knows what this fan can do. */
+                   over a fan turning at 7,500 rpm, which read as a fan nobody could read. Its bar
+                   is scaled on the fan's measured top where the table has one (rpm_max, since
+                   2026-10-30: 13,500 rpm on the AMDA0202 board); elsewhere nothing here knows what
+                   the fan can do, and the scale is the window's, below. */
                 const by_speed = (duty === null || duty === undefined)
                     && fan.rpm !== null && fan.rpm !== undefined;
                 /* Its bar is scaled as a temperature is when no limit is known for it: a quarter
@@ -1944,7 +1959,7 @@
                     decimals: 0,
                     series: of((by_speed ? 'R|' : 'D|') + channel),
                     extra: by_speed ? null : of('R|' + channel),
-                    top: by_speed ? speed_high * 1.25 : 100,
+                    top: by_speed ? (Number(fan.rpm_max) > 0 ? Number(fan.rpm_max) : speed_high * 1.25) : 100,
                     rungs: [],
                     chips: chips,
                     why: why,

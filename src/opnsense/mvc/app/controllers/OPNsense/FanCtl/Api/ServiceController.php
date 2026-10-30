@@ -90,7 +90,13 @@ class ServiceController extends ApiMutableServiceControllerBase
             );
         }
 
-        return parent::reconfigureAction();
+        $result = parent::reconfigureAction();
+        if ($this->request->isPost()) {
+            /* The board fan curve (fanctl.py board-curve) now rather than at cron's next minute; it
+             * does nothing on a machine whose board has no second curve. */
+            (new Backend())->configdRun('fanctl board-curve');
+        }
+        return $result;
     }
 
     private function run($action, $params = [], $timeout = 60)
