@@ -1,0 +1,255 @@
+#-
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright (c) 2026 Abdelmonem Awad <eg2@live.com>
+#
+name: release
+
+# How a tag becomes something a stranger can install.
+#
+# Until this plugin is in OPNsense's own plugin repository there is no "pkg install
+# os-fanctl". What there is instead is one file with a checksum beside it, built from
+# the tag by a job whose every step is written down here - so that what people download
+# is not a file that only ever existed on the author's laptop.
+#
+# The package is built by tools/make-package.sh, the same script that is run by hand on
+# the firewall, and not by a second implementation of it that would drift away from the
+# first. That is the whole point of doing it this way: anybody who distrusts the download
+# can run that script on their own firewall, against this tag, and compare the SHA256.
+#
+# It needs a FreeBSD to run on. pkg(8) is the program that writes a FreeBSD package and
+# there is none on an Ubuntu runner, so the build happens inside a FreeBSD virtual
+# machine and only the packing up and the publishing happen on the runner itself.
+#
+# Nothing about a release is hand-written in this file. The version comes from the
+# Makefile, the notes come from the message of the annotated tag, and the file name comes
+# from the builder. Cutting a release is: write the tag message, push the tag.
+#
+# This workflow needs, in this repository:
+#   Makefile                 PLUGIN_NAME and PLUGIN_VERSION
+#   pkg-descr                the long description that goes in the manifest
+#   src/                     the files that map onto /usr/local
+#   tools/make-package.sh    the builder
+#   pkg/post-install.sh      what pkg(8) runs after unpacking (optional but expected)
+
+on:
+  push:
+    tags:
+      # Deliberately loose, and the precision is in the first step instead. GitHub's
+      # filter patterns are not regular expressions: the documented characters are
+      # "*", "**", "?", "+" and "!", and character ranges like [0-9] are not among
+      # them. A pattern written with one would not fail - it would quietly match
+      # nothing, and a release nobody notices is missing is the worst outcome here.
+      # So: anything beginning with v fires this, and a tag that is not the version
+      # in the Makefile is stopped by the check below, loudly.
+      - 'v*'
+  # Run it by hand to find out whether the FreeBSD build still works without having to
+  # spend a tag on the question. Off a tag it builds and inspects and publishes nothing.
+  # With a tag named it builds that tag and publishes it, when its release is not published
+  # yet - after a run its push started failed before publishing, say. A release that is
+  # published already cannot get its files: this repository's releases are immutable, and
+  # GitHub takes no file into one once it is published (measured 2026-10-28: v1.0.3,
+  # published by hand without its package, refused it with HTTP 422 "Cannot upload assets
+  # to an immutable release"). Its package comes with the next version, cut by pushing an
+  # annotated tag, as above.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'A tag to build and publish, whose release is not published yet; empty: build only'
+        required: false
+        default: ''
+
+# The floor for every job in this file. The one job below raises it by exactly one thing.
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      # To create the release and attach the files to it. Nothing else is granted:
+      # this job does not write to the repository, read Actions, or touch packages.
+      contents: write
+    env:
+      # What the package says it is built for, in the product_abi annotation that every
+      # OPNsense plugin carries. On the firewall tools/make-package.sh asks
+      # opnsense-version(8); a plain FreeBSD virtual machine has no such program, so the
+      # answer is stated here and the built package is checked against it further down.
+      PRODUCT_ABI: '26.7'
+      # The tag this run builds and publishes: the one pushed, or the one named when it
+      # is run by hand; empty when there is none, and then nothing is published.
+      TAG: ${{ inputs.tag || (startsWith(github.ref, 'refs/tags/') && github.ref_name || '') }}
+    steps:
+      - name: This repository
+        uses: actions/checkout@v7
+        with:
+          # The tag's tree when there is one, so a run started by hand builds what it names.
+          ref: ${{ env.TAG || github.ref }}
+          # The whole history and, below, the tags: the release notes are read out of the
+          # annotated tag object by git, locally, so a shallow checkout has nothing to
+          # read them from.
+          fetch-depth: 0
+
+      - name: The tag, the Makefile and main have to agree
+        if: env.TAG != ''
+        run: |
+          set -eu
+          git fetch --force --tags --quiet origin
+          git fetch --force --no-tags --quiet origin +refs/heads/main:refs/remotes/origin/main
+          SHA=$(git rev-parse "${TAG}^{commit}")
+
+          # A tag on a commit that never went through main would publish code that the
+          # branch protection - the required checks, the review - never saw. That is the
+          # one way to get an unchecked file into a release, so close it here.
+          if ! git merge-base --is-ancestor "${SHA}" origin/main; then
+            echo "${TAG} points at ${SHA}, which is not on main."
+            echo "Everything published from here has to have gone through a pull request"
+            echo "and the checks, because that is where the syntax, privacy and"
+            echo "translation rules are enforced. Tag a commit that is on main."
+            exit 1
+          fi
+
+          # The builder names the file after PLUGIN_VERSION, so a tag that says something
+          # else would publish os-fanctl-1.0.pkg under the heading v1.1.
+          version=$(sed -n 's/^PLUGIN_VERSION[[:space:]]*=[[:space:]]*//p' Makefile |
+              sed -e '1!d' -e 's/[[:space:]]*$//')
+          if [ "${TAG#v}" != "${version}" ]; then
+            echo "the tag is ${TAG} and the Makefile says PLUGIN_VERSION=${version}."
+            echo "The package is named after the Makefile, so these two have to match."
+            echo "Either move the tag or raise PLUGIN_VERSION and tag again."
+            exit 1
+          fi
+          echo "${TAG} is on main and matches PLUGIN_VERSION=${version}"
+
+          # Not fatal: gh falls back to the commit message. But an annotated tag is where
+          # the release notes are supposed to come from, so say when there are none.
+          if [ "$(git cat-file -t "${TAG}")" != "tag" ]; then
+            echo "NOTE: ${TAG} is a lightweight tag, so the release notes will"
+            echo "be the commit message. For notes of your own: git tag -a ${TAG}"
+          fi
+
+      - name: The builder is here and parses
+        run: |
+          set -eu
+          if [ ! -f tools/make-package.sh ]; then
+            echo "tools/make-package.sh is missing, and it is what builds the package."
+            echo "There is nothing for this workflow to publish without it."
+            exit 1
+          fi
+          sh -n tools/make-package.sh
+          echo "ok tools/make-package.sh"
+
+      - name: Build the package on FreeBSD
+        uses: vmactions/freebsd-vm@v1
+        with:
+          # The FreeBSD the firewall runs: OPNsense 26.7 is FreeBSD 15.1. The package is
+          # architecture-independent PHP, Python and XML, so this decides the recorded
+          # ABI rather than any compiled code.
+          release: '15.1'
+          # Only the names are listed; the values come from the job environment above.
+          envs: 'PRODUCT_ABI'
+          prepare: |
+            # git so that the builder can record the commit this was built from in the
+            # product_hash annotation; a package somebody forwards you is traceable to a
+            # tree or it is not.
+            pkg install -y git
+          run: |
+            set -eu
+
+            # tools/make-package.sh checks for pkg too, but its absence has a quiet
+            # failure mode elsewhere in the FreeBSD build rules, so it is worth being
+            # loud about here: no pkg, no package, and an empty release is worse than a
+            # failed one.
+            if ! command -v pkg > /dev/null 2>&1; then
+              echo "pkg(8) is not in this virtual machine, and it is the only program"
+              echo "that can write a FreeBSD package."
+              exit 1
+            fi
+
+            rm -rf dist
+            mkdir dist
+            sh tools/make-package.sh -o dist
+
+            PKGFILE=$(ls dist/*.pkg)
+
+            echo
+            echo "================= what was built ================="
+            pkg info -F "${PKGFILE}"
+            echo
+            echo "================= the files in it ================="
+            pkg info -lF "${PKGFILE}"
+            echo
+
+            # Metadata that says "unknown" is metadata nobody can act on, and it would be
+            # baked into a file with a checksum on it. Catch it before it is published.
+            ABI=$(pkg query -F "${PKGFILE}" '%At %Av' | awk '$1 == "product_abi" { print $2 }')
+            if [ "${ABI}" != "${PRODUCT_ABI}" ]; then
+              echo "the package says product_abi ${ABI}, this release is for ${PRODUCT_ABI}."
+              echo
+              echo "On a firewall tools/make-package.sh reads this from opnsense-version(8);"
+              echo "in a plain FreeBSD virtual machine there is no such program, so it has"
+              echo "to accept the answer from its environment. In tools/make-package.sh,"
+              echo "replace"
+              echo "    PRODUCT_ABI=\$(opnsense-version -a 2> /dev/null) || PRODUCT_ABI="
+              echo "with"
+              echo "    if [ -z \"\${PRODUCT_ABI}\" ]; then"
+              echo "        PRODUCT_ABI=\$(opnsense-version -a 2> /dev/null) || PRODUCT_ABI="
+              echo "    fi"
+              exit 1
+            fi
+            echo "product_abi ${ABI}, as this release intends"
+
+      - name: The checksum that goes with it
+        run: |
+          set -eu
+          cd dist
+          ls -l
+          # One line per file. sha256sum(1) is in /sbin on OPNsense 26.7 as much as on
+          # Linux, so one command checks this in both places:
+          #   sha256sum -c SHA256SUMS
+          # and sha256(1), which is FreeBSD base, takes one line of it at a time:
+          #   sha256 -c <the hash> <the file>
+          sha256sum -- *.pkg > SHA256SUMS
+          cat SHA256SUMS
+          {
+            echo '### '"${TAG:-${GITHUB_REF_NAME}}"
+            echo
+            echo '```'
+            cat SHA256SUMS
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Publish the release
+        if: env.TAG != ''
+        env:
+          # The job token, with the contents:write granted above and nothing else. There
+          # is no secret of the owner's in this workflow.
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          # A release published already - by hand, as v1.0.3 was on 2026-10-28 - is said
+          # plainly rather than as "a release with the same tag name already exists".
+          # This repository's releases are immutable, so no file goes into one once it is
+          # published; the files go to one that is not, for a repository without that
+          # setting.
+          if gh release view "${TAG}" > /dev/null 2>&1; then
+            if [ "$(gh release view "${TAG}" --json isImmutable --jq .isImmutable)" = true ]; then
+              echo "${TAG} is published already, and immutable: GitHub takes no file into it."
+              echo "The package built here comes with the next version - raise PLUGIN_VERSION,"
+              echo "write its notes as the message of an annotated tag, and push the tag."
+              exit 1
+            fi
+            gh release upload "${TAG}" --clobber dist/*.pkg dist/SHA256SUMS
+            echo "${TAG} was published already: its files attached to it"
+            exit 0
+          fi
+          # --notes-from-tag is why the tag has to be annotated and why the checkout is
+          # not shallow: gh reads the message out of the local tag object. It also means
+          # --repo cannot be passed, which is fine - gh takes the repository from this
+          # checkout's origin.
+          gh release create "${TAG}" \
+            --verify-tag \
+            --notes-from-tag \
+            --title "${TAG}" \
+            dist/*.pkg dist/SHA256SUMS
