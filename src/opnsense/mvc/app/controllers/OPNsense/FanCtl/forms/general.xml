@@ -20,6 +20,12 @@
         <help>Watch only never writes to the chip at all: the fans stay under whatever law the firmware left them under, and this page fills with real readings. It is what a fresh installation runs, and on hardware nobody has measured it is all this plugin will do. The other two write a duty, and neither of them writes anything until the whole safety contract on the Fans tab is satisfied.</help>
     </field>
     <field>
+        <id>fanctl.general.board_curve</id>
+        <label>Board fan curve</label>
+        <type>dropdown</type>
+        <help>Only on a board that drives its fans itself and has two curves to choose from - today the AMDA0202 board of the XGS 2100, 2300, 3100 and 3300 - and only while Enabled is on; anywhere else it does nothing. On that board the fans follow the CPU's temperature with no duty anybody can write: measured on an XGS 3300, about 7,200 rpm at rest and 13,500 under full load. Quiet selects the lower curve the vendor uses on the 2100 and 2300, through the coprocessor's GPIO 48: about 5,400 rpm at rest, and still rising with heat. It is set again within a minute whenever the coprocessor restarts, and the standard curve comes back while the coprocessor reads 85 C or more, until it is below 78 C. Standard leaves the board's own choice alone.</help>
+    </field>
+    <field>
         <id>fanctl.general.channels</id>
         <label>Fans to control</label>
         <type>select_multiple</type>

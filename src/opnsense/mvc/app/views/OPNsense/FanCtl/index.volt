@@ -375,6 +375,8 @@
         function draw_vitals() {
             const cells = ['#fc-vital-heat', '#fc-vital-air', '#fc-vital-custody'];
             if (!is_object(state_doc)) {
+                $('.fc-vital-fan-extra').remove();
+                $('#fc-vital-air').find('.fc-vital-key').text("{{ lang._('Fans') }}");
                 cells.forEach(function (id) {
                     $(id).removeClass('fc-hot').removeAttr('title');
                     $(id).find('.fc-vital-value').empty().text('—');
@@ -431,11 +433,12 @@
                 $heat_sub.text(said.join(', '));
             }
 
-            /* Air. The fastest channel that reports a speed, and a count of the ones that report
-               none - which on this appliance is four of five, and is not four stopped fans. */
+            /* Air. A card for each fan that reports a speed - two on a board with two fans
+               (2026-10-30: the one card showed the faster of the two and "and 1 more") - and a
+               count, under the first, of the channels that report none, which on the reference
+               appliance is four of five, and is not four stopped fans. */
             const fans = $.isArray(state_doc.fans) ? state_doc.fans : [];
-            let loudest = null;
-            let reporting = 0;
+            const turning = [];
             const quiet = [];
             fans.forEach(function (fan) {
                 const rpm = Number(fan.rpm);
@@ -443,41 +446,51 @@
                     quiet.push(String(fan.channel || ''));
                     return;
                 }
-                reporting += 1;
-                if (loudest === null || rpm > Number(loudest.rpm)) {
-                    loudest = fan;
-                }
+                turning.push(fan);
             });
 
-            const $air_value = $('#fc-vital-air').find('.fc-vital-value').empty();
-            const $air_sub = $('#fc-vital-air').find('.fc-vital-sub').empty();
-            if (loudest === null) {
-                $air_value.append(value(null, '', ''));
-                $air_sub.text(quiet.length
+            $('.fc-vital-fan-extra').remove();
+            const $air = $('#fc-vital-air');
+            $air.find('.fc-vital-key').text("{{ lang._('Fans') }}");
+            if (!turning.length) {
+                $air.find('.fc-vital-value').empty().append(value(null, '', ''));
+                $air.find('.fc-vital-sub').empty().text(quiet.length
                     ? fc_fill("{{ lang._('{count} channels report no fan:') }}",
                         {count: quiet.length}) + ' ' + quiet.join(', ')
                     : '');
             } else {
-                $air_value.text(fc_num(loudest.rpm) + unit_suffix('rpm'));
-                /* Every field on this line is printed only if the document carried it.
-                   String(undefined) is the word undefined, and a reader who is told that
-                   undefined is turning at 5113 rpm has been told nothing twice. */
-                const said = [];
-                if (loudest.channel !== null && loudest.channel !== undefined
-                        && loudest.channel !== '') {
-                    said.push(String(loudest.channel));
-                }
-                if (loudest.duty !== null && loudest.duty !== undefined) {
-                    said.push(String(loudest.duty) + '%');
-                }
-                if (loudest.label && loudest.label !== 'unknown') {
-                    said.push(String(loudest.label));
-                }
-                if (reporting > 1) {
-                    said.push(fc_fill("{{ lang._('and {count} more') }}",
-                        {count: reporting - 1}));
-                }
-                $air_sub.text(said.join(', '));
+                let $after = $air;
+                turning.forEach(function (fan, index) {
+                    const $card = index === 0 ? $air
+                        : $air.clone().removeAttr('id').addClass('fc-vital-fan-extra').insertAfter($after);
+                    $after = $card;
+                    if (turning.length > 1) {
+                        /* the table's label, "fan 0", read as its number; a channel name otherwise */
+                        const label = String(fan.label || '');
+                        const number = /^fan\s*(\d+)$/i.exec(label);
+                        $card.find('.fc-vital-key').text(fc_fill("{{ lang._('Fan {name}') }}",
+                            {name: number ? number[1] : (label && label !== 'unknown' ? label : String(fan.channel || ''))}));
+                    }
+                    $card.find('.fc-vital-value').empty().text(fc_num(fan.rpm) + unit_suffix('rpm'));
+                    /* Every field on this line is printed only if the document carried it.
+                       String(undefined) is the word undefined, and a reader who is told that
+                       undefined is turning at 5113 rpm has been told nothing twice. */
+                    const said = [];
+                    if (fan.channel !== null && fan.channel !== undefined && fan.channel !== '') {
+                        said.push(String(fan.channel));
+                    }
+                    if (fan.duty !== null && fan.duty !== undefined) {
+                        said.push(String(fan.duty) + '%');
+                    }
+                    if (turning.length === 1 && fan.label && fan.label !== 'unknown') {
+                        said.push(String(fan.label));
+                    }
+                    if (Number(fan.rpm_max) > 0) {
+                        said.push(fc_fill("{{ lang._('top speed {rpm} rpm, measured') }}",
+                            {rpm: fc_num(fan.rpm_max)}));
+                    }
+                    $card.find('.fc-vital-sub').empty().text(said.join(', '));
+                });
             }
 
             /* Custody. Four fields on one line and no fifth word invented out of them: whether
@@ -923,7 +936,8 @@
                baseline; this is a different book kept by a different writer, and both are shown
                without either being reconciled to the other here. */
             const channels = $.isArray(found.channels) ? found.channels : [];
-            if (channels.length) {
+            /* not for tachometers read through a CPLD: there is no setting of theirs to keep */
+            if (channels.length && found.source !== 'cpld') {
                 const $saved = $('<div/>');
                 channels.forEach(function (channel) {
                     $saved.append(chip(
@@ -969,6 +983,47 @@
             }
         }
 
+        /* The board's own curve, where the table gives the board two (fanctl.py board_curve_status):
+           from the live document when it has arrived, from the probe otherwise. */
+        function board_curve_doc() {
+            if (state_doc && is_object(state_doc.board_curve)) {
+                return state_doc.board_curve;
+            }
+            return (probe_doc && is_object(probe_doc.board_curve)) ? probe_doc.board_curve : {};
+        }
+
+        function board_curve_name(board) {
+            if (!board.enabled || board.set !== 'quiet') {
+                return "{{ lang._('the standard curve') }}";
+            }
+            return board.held_by_heat
+                ? "{{ lang._('the standard curve, held while the coprocessor is hot') }}"
+                : "{{ lang._('the quiet curve') }}";
+        }
+
+        /* The Settings tab on such a board: Board fan curve shown only where it does something,
+           and a line above the form saying which of its fields apply - the duty fields below it
+           do nothing on a board with no duty register, and an owner set them and saw nothing
+           change (os-xgs-npu issue 901). */
+        function draw_board_settings() {
+            if (state_doc === null && probe_doc === null) {
+                return;
+            }
+            const board = board_curve_doc();
+            $('tr[id="row_fanctl.general.board_curve"]').toggle(!!board.available);
+            const controlled = !!(((probe_doc || {}).table || {}).control);
+            let $note = $('#fc-board-note');
+            if (board.available && !controlled) {
+                if ($note.length === 0) {
+                    $note = $('<div id="fc-board-note" class="alert alert-info" role="alert"/>')
+                        .insertBefore('#frm_general');
+                }
+                $note.text("{{ lang._('This board drives its fans itself: only Enabled and Board fan curve apply to it. Everything else on this tab is for a fan on a chip this plugin can drive.') }}");
+            } else {
+                $note.remove();
+            }
+        }
+
         function draw_model() {
             const $body = $('#model-body').empty();
             if (probe_doc === null) {
@@ -988,11 +1043,20 @@
                 }).join(' / ') || "{{ lang._('this machine reports no SMBIOS names') }}").addClass('fc-muted'))));
 
             /* the table's verdict in plain sight; its reasons, which run to a paragraph, under
-               full help */
+               full help. A board that drives its fans itself and has a second curve (2026-10-30,
+               the AMDA0202 board) is not "no control": its curve is the choice, and the chip
+               beside the verdict says which one runs. */
+            const board = board_curve_doc();
             const $control = $('<div/>').append(table.control
                 ? label("{{ lang._('the table permits control on this model') }}", 'label-info')
-                : label("{{ lang._('the table does not permit control on this model') }}",
-                        'label-default'));
+                : (board.available
+                    ? label("{{ lang._('the board drives its fans itself; its curve is chosen on the Settings tab') }}",
+                        'label-info')
+                    : label("{{ lang._('the table does not permit control on this model') }}",
+                        'label-default')));
+            if (board.available) {
+                $control.append(' ').append(chip(board_curve_name(board), 'text-muted', ''));
+            }
             if (table.reason) {
                 $control.append(help_note(String(table.reason)));
             }
@@ -1052,6 +1116,14 @@
             const chip = (probe_doc && is_object(probe_doc.chip)) ? probe_doc.chip : null;
             const channels = (chip && $.isArray(chip.channels)) ? chip.channels : [];
             const floors = (probe_doc && is_object(probe_doc.floors)) ? probe_doc.floors : {};
+
+            /* A board that drives its fans itself has no duty for a floor to be measured on; what
+               follows - the service owning the chip, the floor test - is about a chip this
+               plugin writes to. */
+            if (board_curve_doc().available && !(chip && chip.writable)) {
+                $body.append(hw_wide(note("{{ lang._('This board drives its fans itself, so there is no duty here for a floor to be measured against.') }}", 'fc-muted')));
+                return;
+            }
 
             $body.append(hw_wide(help_note(
                 "{{ lang._('A floor is the lowest duty at which a fan that is already turning keeps turning, measured on this machine, plus one step. It is not the duty at which a stopped fan starts - that is higher on every fan ever made, and measuring it would mean stopping a fan on a firewall that is in service. Nothing is driven below a floor, and nothing is driven at all on a channel whose floor has never been measured.') }}"
@@ -1924,8 +1996,10 @@
                     ? fan.output : fan.duty;
                 /* A tachometer with no duty behind it - a board that keeps its own curve - is
                    drawn on its speed, its record the speed's: the row was a dash and an empty bar
-                   over a fan turning at 7,500 rpm, which read as a fan nobody could read. No bar
-                   for the speed, by the footer's rule: nothing here knows what this fan can do. */
+                   over a fan turning at 7,500 rpm, which read as a fan nobody could read. Its bar
+                   is scaled on the fan's measured top where the table has one (rpm_max, since
+                   2026-10-30: 13,500 rpm on the AMDA0202 board); elsewhere nothing here knows what
+                   the fan can do, and the scale is the window's, below. */
                 const by_speed = (duty === null || duty === undefined)
                     && fan.rpm !== null && fan.rpm !== undefined;
                 /* Its bar is scaled as a temperature is when no limit is known for it: a quarter
@@ -1944,7 +2018,7 @@
                     decimals: 0,
                     series: of((by_speed ? 'R|' : 'D|') + channel),
                     extra: by_speed ? null : of('R|' + channel),
-                    top: by_speed ? speed_high * 1.25 : 100,
+                    top: by_speed ? (Number(fan.rpm_max) > 0 ? Number(fan.rpm_max) : speed_high * 1.25) : 100,
                     rungs: [],
                     chips: chips,
                     why: why,
@@ -2116,6 +2190,7 @@
                 draw_rows();
                 update_floor_note();
                 update_curve_pending();
+                draw_board_settings();
                 if (typeof done === 'function') {
                     done();
                 }
@@ -2129,6 +2204,7 @@
                 draw_model();
                 draw_curve_why();
                 draw_workbench();
+                draw_board_settings();
                 if (typeof done === 'function') {
                     done();
                 }
@@ -2326,6 +2402,7 @@
            name typed by hand, and the Hardware tab is where the names are. */
         function load_form() {
             mapDataToFormUI({'frm_general': '/api/fanctl/settings/get'}).done(function () {
+                draw_board_settings();
                 offer_channels();
                 offer_sensors();
                 formatTokenizersUI();

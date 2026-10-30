@@ -24,3 +24,7 @@
 # running it by hand. A cron job that mailed root a line every minute would be a cron job somebody
 # deletes in a fortnight.
 *	*	*	*	*	root	/usr/local/opnsense/scripts/fanctl/history.py sample > /dev/null 2>&1
+
+# The board fan curve of a board that keeps its own (fanctl.py board-curve): set again within a minute
+# when the coprocessor restarts and lets go of it; with nothing to do it asks nothing of the coprocessor.
+*	*	*	*	*	root	/usr/local/opnsense/scripts/fanctl/fanctl.py board-curve > /dev/null 2>&1
