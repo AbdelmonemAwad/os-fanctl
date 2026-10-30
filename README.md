@@ -1,3 +1,22 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/banner-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="docs/images/readme/banner-light.svg">
+  <img src="docs/images/readme/banner-light.svg" alt="os-fanctl - Fan control, and every temperature the machine will give up" width="100%">
+</picture>
+
+<p align="center">
+  <a href="https://github.com/AbdelmonemAwad/os-fanctl/releases/latest"><img alt="the newest release" src="https://img.shields.io/github/v/release/AbdelmonemAwad/os-fanctl?sort=semver&amp;style=flat-square&amp;label=release&amp;color=8250df"></a>
+  <a href="https://github.com/AbdelmonemAwad/os-fanctl/actions/workflows/checks.yml"><img alt="checks on main" src="https://img.shields.io/github/actions/workflow/status/AbdelmonemAwad/os-fanctl/checks.yml?branch=main&amp;style=flat-square&amp;label=checks"></a>
+  <a href="LICENSE"><img alt="licence: BSD-2-Clause" src="https://img.shields.io/badge/licence-BSD--2--Clause-blue.svg?style=flat-square"></a>
+  <a href="#fan-control-for-opnsense"><img alt="OPNsense 26.7" src="https://img.shields.io/badge/OPNsense-26.7-d94f00.svg?style=flat-square"></a>
+  <a href="https://github.com/AbdelmonemAwad/opnsense-arabic"><img alt="the page in English and in Arabic" src="https://img.shields.io/badge/GUI-English%20%C2%B7%20Arabic-2da44e.svg?style=flat-square"></a>
+  <a href="https://github.com/AbdelmonemAwad/os-xgs-npu"><img alt="part of os-xgs-npu" src="https://img.shields.io/badge/part%20of-os--xgs--npu-9a6700.svg?style=flat-square"></a>
+  <br>
+  <a href="#fan-control-for-opnsense"><img alt="the board&#x27;s own SmartFan IV curve asked the chassis fan for 20% duty while the CPU cores sat at 80 °C - measured here" src="https://img.shields.io/badge/board%20curve-20%20%25%20duty%20at%2080%20%C2%B0C-brightgreen.svg?style=flat-square"></a>
+  <a href="#fan-control-for-opnsense"><img alt="a fan that had gone in backwards, turned round: 22 °C, more than four times what the fan speed bought - measured here" src="https://img.shields.io/badge/fan%20turned%20round-22%20%C2%B0C%20cooler-brightgreen.svg?style=flat-square"></a>
+  <a href="#what-it-does"><img alt="one sample of every sensor and fan costs 1.4 ms, and the whole record is bounded at 503 KiB - measured here" src="https://img.shields.io/badge/record-1.4%20ms%20a%20sample%2C%20503%20KiB%20at%20most-brightgreen.svg?style=flat-square"></a>
+</p>
+
 # Fan Control for OPNsense
 
 A plugin that gives a repurposed appliance back the fan curve that went away with the vendor's
@@ -18,6 +37,8 @@ says what it has not measured rather than filling the gap with a number.
 Tested on OPNsense 26.7.4_1 / FreeBSD 15.1-RELEASE-p3, on one machine: an ex-Sophos XG 330 rev 2
 with a Nuvoton NCT6779D. Everything below marked **measured here** was measured on that machine.
 Everything else comes from primary sources and is marked where it matters.
+
+<p align="center"><b>Contents:</b> <a href="#what-it-does">What it does</a> &middot; <a href="#what-it-refuses-to-do-and-why-that-is-the-point">What it refuses to do, and why that is the point</a> &middot; <a href="#the-safety-contract">The safety contract</a> &middot; <a href="#two-things-worth-knowing-about-this-class-of-hardware">Two things worth knowing about this class of hardware</a> &middot; <a href="#installing-it">Installing it</a> &middot; <a href="#putting-it-on-an-appliance-it-has-never-seen">Putting it on an appliance it has never seen</a> &middot; <a href="#where-the-details-are">Where the details are</a> &middot; <a href="#in-the-xgs-image">In the XGS image</a> &middot; <a href="#in-arabic">In Arabic</a> &middot; <a href="#updates">Updates</a> &middot; <a href="#licence">Licence</a></p>
 
 ## What it does
 
