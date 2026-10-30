@@ -116,6 +116,15 @@ over, which is every channel on any board whose firmware set one.
 sh install/install.sh
 ```
 
+Or from a release's package: every release since 1.1.5 carries `os-fanctl-<version>.pkg` and its
+`SHA256SUMS`, built by `tools/make-package.sh` - the same builder, run by hand on a firewall,
+makes it from a checkout. Read it before you add it:
+
+```sh
+pkg info -lF os-fanctl-*.pkg      # every file it will write
+pkg add os-fanctl-*.pkg
+```
+
 Idempotent: re-run it after an update. Your settings are kept, and so
 are the floor measurements in `/var/db/fanctl` — which matter more than either, because they are
 the only numbers in this plugin that came from hardware rather than from a keyboard.

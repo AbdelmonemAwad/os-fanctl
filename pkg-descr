@@ -47,6 +47,14 @@ and what is wanted in it is a measurement rather than a datasheet.
 Plugin Changelog
 ================
 
+1.1.5
+
+* A release workflow, as the other plugins have: every release carries
+  the package, os-fanctl-<version>.pkg, and SHA256SUMS, built in a
+  FreeBSD virtual machine by tools/make-package.sh, which also runs by
+  hand on a firewall. 1.1.4 was tagged before it and has no release; its
+  change, the page's icon in the XGS section, comes with this one
+
 1.1.4
 
 * The page's entry in the XGS section of the menu carries an icon, as
