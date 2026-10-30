@@ -2724,6 +2724,7 @@ def probe():
         'machine': dict(smbios(), model=key, display=entry.get('display', '')),
         'chip': found,
         'fingerprint': {'ok': ok, 'complaints': complaints},
+        'board_curve': board_curve_status(entry, options),
         'table': {
             'control': bool(entry.get('control')),
             'reason': entry.get('control_reason') or '',

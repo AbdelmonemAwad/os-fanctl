@@ -936,7 +936,8 @@
                baseline; this is a different book kept by a different writer, and both are shown
                without either being reconciled to the other here. */
             const channels = $.isArray(found.channels) ? found.channels : [];
-            if (channels.length) {
+            /* not for tachometers read through a CPLD: there is no setting of theirs to keep */
+            if (channels.length && found.source !== 'cpld') {
                 const $saved = $('<div/>');
                 channels.forEach(function (channel) {
                     $saved.append(chip(
@@ -982,6 +983,47 @@
             }
         }
 
+        /* The board's own curve, where the table gives the board two (fanctl.py board_curve_status):
+           from the live document when it has arrived, from the probe otherwise. */
+        function board_curve_doc() {
+            if (state_doc && is_object(state_doc.board_curve)) {
+                return state_doc.board_curve;
+            }
+            return (probe_doc && is_object(probe_doc.board_curve)) ? probe_doc.board_curve : {};
+        }
+
+        function board_curve_name(board) {
+            if (!board.enabled || board.set !== 'quiet') {
+                return "{{ lang._('the standard curve') }}";
+            }
+            return board.held_by_heat
+                ? "{{ lang._('the standard curve, held while the coprocessor is hot') }}"
+                : "{{ lang._('the quiet curve') }}";
+        }
+
+        /* The Settings tab on such a board: Board fan curve shown only where it does something,
+           and a line above the form saying which of its fields apply - the duty fields below it
+           do nothing on a board with no duty register, and an owner set them and saw nothing
+           change (os-xgs-npu issue 901). */
+        function draw_board_settings() {
+            if (state_doc === null && probe_doc === null) {
+                return;
+            }
+            const board = board_curve_doc();
+            $('tr[id="row_fanctl.general.board_curve"]').toggle(!!board.available);
+            const controlled = !!(((probe_doc || {}).table || {}).control);
+            let $note = $('#fc-board-note');
+            if (board.available && !controlled) {
+                if ($note.length === 0) {
+                    $note = $('<div id="fc-board-note" class="alert alert-info" role="alert"/>')
+                        .insertBefore('#frm_general');
+                }
+                $note.text("{{ lang._('This board drives its fans itself: only Enabled and Board fan curve apply to it. Everything else on this tab is for a fan on a chip this plugin can drive.') }}");
+            } else {
+                $note.remove();
+            }
+        }
+
         function draw_model() {
             const $body = $('#model-body').empty();
             if (probe_doc === null) {
@@ -1001,11 +1043,20 @@
                 }).join(' / ') || "{{ lang._('this machine reports no SMBIOS names') }}").addClass('fc-muted'))));
 
             /* the table's verdict in plain sight; its reasons, which run to a paragraph, under
-               full help */
+               full help. A board that drives its fans itself and has a second curve (2026-10-30,
+               the AMDA0202 board) is not "no control": its curve is the choice, and the chip
+               beside the verdict says which one runs. */
+            const board = board_curve_doc();
             const $control = $('<div/>').append(table.control
                 ? label("{{ lang._('the table permits control on this model') }}", 'label-info')
-                : label("{{ lang._('the table does not permit control on this model') }}",
-                        'label-default'));
+                : (board.available
+                    ? label("{{ lang._('the board drives its fans itself; its curve is chosen on the Settings tab') }}",
+                        'label-info')
+                    : label("{{ lang._('the table does not permit control on this model') }}",
+                        'label-default')));
+            if (board.available) {
+                $control.append(' ').append(chip(board_curve_name(board), 'text-muted', ''));
+            }
             if (table.reason) {
                 $control.append(help_note(String(table.reason)));
             }
@@ -1065,6 +1116,14 @@
             const chip = (probe_doc && is_object(probe_doc.chip)) ? probe_doc.chip : null;
             const channels = (chip && $.isArray(chip.channels)) ? chip.channels : [];
             const floors = (probe_doc && is_object(probe_doc.floors)) ? probe_doc.floors : {};
+
+            /* A board that drives its fans itself has no duty for a floor to be measured on; what
+               follows - the service owning the chip, the floor test - is about a chip this
+               plugin writes to. */
+            if (board_curve_doc().available && !(chip && chip.writable)) {
+                $body.append(hw_wide(note("{{ lang._('This board drives its fans itself, so there is no duty here for a floor to be measured against.') }}", 'fc-muted')));
+                return;
+            }
 
             $body.append(hw_wide(help_note(
                 "{{ lang._('A floor is the lowest duty at which a fan that is already turning keeps turning, measured on this machine, plus one step. It is not the duty at which a stopped fan starts - that is higher on every fan ever made, and measuring it would mean stopping a fan on a firewall that is in service. Nothing is driven below a floor, and nothing is driven at all on a channel whose floor has never been measured.') }}"
@@ -2131,6 +2190,7 @@
                 draw_rows();
                 update_floor_note();
                 update_curve_pending();
+                draw_board_settings();
                 if (typeof done === 'function') {
                     done();
                 }
@@ -2144,6 +2204,7 @@
                 draw_model();
                 draw_curve_why();
                 draw_workbench();
+                draw_board_settings();
                 if (typeof done === 'function') {
                     done();
                 }
@@ -2341,6 +2402,7 @@
            name typed by hand, and the Hardware tab is where the names are. */
         function load_form() {
             mapDataToFormUI({'frm_general': '/api/fanctl/settings/get'}).done(function () {
+                draw_board_settings();
                 offer_channels();
                 offer_sensors();
                 formatTokenizersUI();
