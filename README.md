@@ -36,7 +36,7 @@ says what it has not measured rather than filling the gap with a number.
 
 Tested on OPNsense 26.7.4_1 / FreeBSD 15.1-RELEASE-p3, on one machine: an ex-Sophos XG 330 rev 2
 with a Nuvoton NCT6779D. Everything below marked **measured here** was measured on that machine.
-Everything else comes from primary sources and is marked where it matters.
+Everything else comes from primary sources and is marked where it matters. On 2026-10-31 it runs on OPNsense 26.7.8_1 on the first XGS 3300.
 
 <p align="center"><b>Contents:</b> <a href="#what-it-does">What it does</a> &middot; <a href="#what-it-refuses-to-do-and-why-that-is-the-point">What it refuses to do, and why that is the point</a> &middot; <a href="#the-safety-contract">The safety contract</a> &middot; <a href="#two-things-worth-knowing-about-this-class-of-hardware">Two things worth knowing about this class of hardware</a> &middot; <a href="#installing-it">Installing it</a> &middot; <a href="#putting-it-on-an-appliance-it-has-never-seen">Putting it on an appliance it has never seen</a> &middot; <a href="#where-the-details-are">Where the details are</a> &middot; <a href="#in-the-xgs-image">In the XGS image</a> &middot; <a href="#in-arabic">In Arabic</a> &middot; <a href="#updates">Updates</a> &middot; <a href="#licence">Licence</a></p>
 
