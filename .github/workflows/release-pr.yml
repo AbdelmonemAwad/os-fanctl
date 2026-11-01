@@ -1,0 +1,37 @@
+#-
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright (c) 2026 Abdelmonem Awad <eg2@live.com>
+#
+name: release pull request
+
+# When a change to what this plugin installs - src/, pkg/, install/, the Makefile - reaches main, the
+# pull request for its next release opens by itself, or is brought up to date: PLUGIN_VERSION up by
+# one, a first changelog block in pkg-descr from the changes' titles, checks.yml started on it. Its
+# text is a first draft; putting it right, merging, and the annotated tag release.yml builds the
+# package from stay with a person. A change to the README or the pages alone opens nothing.
+#
+# The work is os-xgs-npu's plugin-release-pr workflow, the same for every plugin. Run by hand, it only
+# says what it would do unless told otherwise.
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Only say what would be done
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  release-pr:
+    uses: AbdelmonemAwad/os-xgs-npu/.github/workflows/plugin-release-pr.yml@main
+    with:
+      dry_run: ${{ inputs.dry_run || false }}
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
