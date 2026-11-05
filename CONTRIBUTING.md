@@ -12,8 +12,11 @@ It is one part of the [os-xgs-npu](https://github.com/AbdelmonemAwad/os-xgs-npu)
   says plainly what was not. "Should work" is not a state this project records.
 - **Withdraw a wrong claim in the change that disproves it**: struck through, with the correction
   after it, so the reasoning that led to it stays readable.
-- **Every string on a page has its Arabic.** The plugin keeps its own translation; the
-  checks refuse a page string without one.
+- **Every string on a page has its Arabic** in
+  [opnsense-arabic](https://github.com/AbdelmonemAwad/opnsense-arabic)'s catalogue. If you do not write
+  Arabic, leave it out: a pull request that adds or changes a menu entry, a form's label or help, or a
+  new page is merged without it, the string shows in English until its Arabic follows, and the checks
+  list it meanwhile.
 
 ## Copyright, and what a contribution agrees to
 

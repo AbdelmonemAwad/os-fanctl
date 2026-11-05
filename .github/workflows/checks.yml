@@ -146,6 +146,10 @@ jobs:
           python3 tools/gen-data-strings.py --check
 
       - name: Every string the page asks for is in the catalogue
+        # A contributor's pull request (from a fork) and main may carry a string whose Arabic follows
+        # later (CONTRIBUTING.md): a warning there; on a branch of this repository a failure, as before.
+        env:
+          ARABIC_LATER: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository) && '1' || '' }}
         run: |
           [ -f tools/check-strings.py ] || { echo "not this plugin yet"; exit 0; }
           python3 tools/check-strings.py

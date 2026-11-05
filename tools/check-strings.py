@@ -14,7 +14,8 @@ A catalogued string no page uses any more is listed and does not fail.
 
 THE ARABIC is in opnsense-arabic's catalogue since 2026-10-22 (its issue 5), the one Arabic
 catalogue of the whole GUI, and is read from there: from a checkout of it when ARABIC_PO names its
-ar_SA.po, else from its main branch on GitHub. A string added here needs its Arabic there first.
+ar_SA.po, else from its main branch on GitHub. A string added here needs its Arabic there first,
+except from a contributor who does not write Arabic: see ARABIC_LATER below.
 """
 
 import json
@@ -24,6 +25,26 @@ import re
 import sys
 import urllib.request
 import xml.etree.ElementTree as ET
+
+# A contributor who does not write Arabic leaves it out (CONTRIBUTING.md). On a pull request from a
+# fork and on main, checks.yml sets ARABIC_LATER=1: a string without Arabic is then a warning on the
+# pull request and not a failure, and opnsense-arabic's "Strings waiting for Arabic" lists it until
+# its Arabic is there. A pull request from a branch of this repository still fails on one.
+LATER = os.environ.get('ARABIC_LATER') == '1'
+
+
+def later(keys):
+    """Each string without Arabic as a warning GitHub shows on the pull request, and in its summary."""
+    if not LATER:
+        return
+    for key in keys:
+        print('::warning title=Arabic to follow::' +
+              key.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A'))
+    summary = os.environ.get('GITHUB_STEP_SUMMARY')
+    if keys and summary:
+        with open(summary, 'a', encoding='utf-8') as handle:
+            handle.write('### Strings waiting for Arabic\n\n' + ''.join('- %s\n' % key for key in keys))
+
 
 ROOT = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else '.')
 UI = ROOT / 'src' / 'opnsense' / 'scripts' / 'fanctl' / 'i18n' / 'ui'
@@ -125,7 +146,8 @@ def main():
         print('   NOT CATALOGUED (%s): %s' % (f, s[:90]))
     for s in untranslated:
         print('   NO ARABIC in opnsense-arabic: %s' % s[:90])
-    return 1 if absent or untranslated else 0
+    later(untranslated)
+    return 1 if absent or (untranslated and not LATER) else 0
 
 
 if __name__ == '__main__':
