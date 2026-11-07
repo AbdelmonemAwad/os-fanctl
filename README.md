@@ -213,16 +213,24 @@ widget gains a string that is not in `source.json` or has no Arabic there.
 ## Updates
 
 An installed copy is updated to this repository's **releases** by hand: from **XGS: Updates**, its *Plugins*
-tab ([os-xgs-npu](https://github.com/AbdelmonemAwad/os-xgs-npu)), or with `/usr/local/opnsense/scripts/fanctl/self-update.py`. ~~Once a day, at 03:23, from `/usr/local/etc/cron.d/fanctl-update`~~ - nothing
-is installed on its own since 2026-10-20: an update runs when the appliance's owner starts it. It asks GitHub for the latest release and, when it is ahead of what
-is installed, downloads it and runs the `install/install.sh` it carries - the same script a hand install
-runs. A change merged on `main` reaches installed firewalls when it is released, not before; with
-no release published, nothing changes.
+tab ([os-xgs-npu](https://github.com/AbdelmonemAwad/os-xgs-npu)), or with `/usr/local/opnsense/scripts/fanctl/self-update.py`.
+Nothing is installed on its own since 2026-10-20: an update runs when the appliance's owner starts it. It reads the
+latest release's signed manifest and, when the release is ahead of what is installed, downloads the archive the
+manifest names and runs the `install/install.sh` it carries - the same script a hand install runs. A change merged
+on `main` reaches installed firewalls when it is released, not before; with no release published, nothing changes.
 
+- **Signed releases** (since 2026-11-07). A release is installed only as its owner signed it. It carries
+  `os-fanctl-<tag>.tar.gz`, the tag's tree made by `git archive`; `release.json`, the manifest - the tag, its
+  commit and date, the archive's SHA-256 and size; and `release.json.sig`, the manifest's Ed25519 signature, made by
+  the owner's private signing repository, never by this repository's CI. The public keys are installed in
+  `/usr/local/opnsense/scripts/fanctl/release-keys/`. A release whose signature does not verify with one of them,
+  or whose archive is not the one signed, is not installed, and a release not signed is not offered. GitHub's API
+  and npuforge.org's copy of it no longer choose what is installed, and the tag's commit is confirmed with GitHub
+  before the download. A release is made a draft by `release.yml` and published only once it is signed.
 - **Only forward.** What is installed is recorded in `/usr/local/share/os-fanctl/installed.json` by
   the installer - the commit, from a git checkout or from the `.source-commit` stamp that an
   xgs-image-builder image or an update leaves in the tree. A firewall running something newer than
-  the release is not taken back; an install from before the stamp existed takes the latest release
+  the release - by the date signed - is not taken back; an install from before the stamp existed takes the latest release
   once.
 - **What happened** is in the system log as `self-update`, in
   `/usr/local/share/os-fanctl/update.json`, and the installer's output in `update.log` beside it.
@@ -230,9 +238,9 @@ no release published, nothing changes.
 - An update leaves a running controller on the code it started with, as a hand install does;
   it takes the new code at its next start.
 
-Tested in a QEMU virtual machine against a stand-in for GitHub (no release had been published):
-a release ahead is installed, one that is not is left, no release and an unreachable GitHub change
-nothing, and the uninstaller removes the updater, its cron entry and the stamp.
+Tested by `tools/test-self-update.py`, which the checks run - releases made and signed in the test with
+throwaway keys: what is taken and refused, and what an update installs - and on an XGS 3300 through the
+*Plugins* tab, with seven other plugins: [the plugins' signed releases, measured](https://github.com/AbdelmonemAwad/os-xgs-npu/blob/main/docs/measurements/signed-plugin-releases-2026-11-07.md).
 
 ## Licence
 
