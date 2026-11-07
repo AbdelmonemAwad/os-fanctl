@@ -267,18 +267,23 @@ jobs:
       # The signing repository is another one, private, whose workflow this run's own token
       # cannot start: SIGNING_DISPATCH_TOKEN is a fine-grained token with Actions read and
       # write on it alone. Without it, that repository's own look every six hours finds the
-      # draft.
+      # draft. The branch is named, so nothing is asked of that repository but the start, and a
+      # start that fails fails the run: until 2026-11-07 the start asked for its default branch,
+      # which that token may not read, and the step was let pass (continue-on-error) - the run
+      # green, os-netreport v1.0.6 left a draft with nothing to show why but its log.
       - name: Start the signing of the release
         if: env.TAG != ''
-        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.SIGNING_DISPATCH_TOKEN }}
         run: |
           set -eu
           if [ -z "${GH_TOKEN}" ]; then
-            echo "no SIGNING_DISPATCH_TOKEN: os-xgs-npu-release-signing signs and publishes ${TAG} at its next look, within six hours"
+            echo "::warning::no SIGNING_DISPATCH_TOKEN: os-xgs-npu-release-signing signs and publishes ${TAG} at its next look, within six hours"
             exit 0
           fi
-          gh workflow run sign.yml -R AbdelmonemAwad/os-xgs-npu-release-signing \
-            -f repository="${GITHUB_REPOSITORY#*/}" -f tag="${TAG}"
+          if ! gh workflow run sign.yml -R AbdelmonemAwad/os-xgs-npu-release-signing --ref main \
+              -f repository="${GITHUB_REPOSITORY#*/}" -f tag="${TAG}"; then
+            echo "::error::the signing of ${TAG} was not started: SIGNING_DISPATCH_TOKEN cannot start sign.yml in os-xgs-npu-release-signing; the release stays a draft until that repository's look, within six hours"
+            exit 1
+          fi
           echo "os-xgs-npu-release-signing is signing ${TAG}; it publishes the release once its files are up"
