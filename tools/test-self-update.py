@@ -258,6 +258,25 @@ trust('stranger', 'owner')
 check('one key of several held is enough, and named', run('check')[1].get('signed_with'), 'xgs-release-key-owner.pub')
 trust('owner')
 
+# K9 (os-xgs-npu's release check, 2026-11-07): the manifest and its signature were read through 'latest'
+# twice, and a release published between the two reads paired one release's manifest with another's
+# signature. The signature is read by the tag the manifest names: 'latest' holding another manifest's
+# signature, the one under the release's own tag is read, and the release is taken.
+publish('v1.0.9', owner)
+with open(os.path.join(RELEASES, 'latest', 'download', 'release.json.sig'), 'wb') as f:
+    f.write(sign(owner, b'the manifest of the release before\n'))
+check('K9: latest holding the signature of another manifest: the one under its tag read, taken',
+      [run('check')[1].get(k) for k in ('tag', 'take')], ['v1.0.9', True])
+os.remove(os.path.join(RELEASES, 'download', 'v1.0.9', 'release.json.sig'))
+check('K9: ... and none under its tag: not signed yet, as before', run('check')[1].get('message'),
+      'the latest release is not signed yet: it has no release.json.sig')
+# a manifest nested deeper than the parser goes: refused by its signature, never the check ended by it
+publish('v1.0.9', owner)
+with open(os.path.join(RELEASES, 'latest', 'download', 'release.json'), 'wb') as f:
+    f.write(b'[' * 5000)
+check('a manifest nested too deep to parse: refused by its signature, the check answers',
+      'does not verify' in (run('check')[1].get('message') or ''), True)
+
 publish('v1.0.9', owner, signature=False)
 check('a release with no signature: not signed yet', run('check')[1].get('message'),
       'the latest release is not signed yet: it has no release.json.sig')
@@ -283,7 +302,7 @@ for name, fields, said in (
 
 publish('v1.0.9', owner, sig=b'x' * 65)
 check('a signature longer than one can be: not read further', run('check')[1].get('message'),
-      'release.json.sig of the latest release is larger than a release file of its kind can be')
+      'release.json.sig of v1.0.9 is larger than a release file of its kind can be')
 publish('v1.0.9', owner, fields={'notes': 'x' * (64 << 10)})
 check('a manifest larger than one can be: not read further', run('check')[1].get('message'),
       'release.json of the latest release is larger than a release file of its kind can be')

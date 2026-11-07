@@ -209,6 +209,17 @@ FIELDS = {
 }
 
 
+def named_tag(data):
+    """The tag a manifest not yet verified names, as only where to read its signature; '' when it
+    names none of the form a tag has, and the latest release's signature is read as before."""
+    try:
+        found = json.loads(data.decode('utf-8'))
+    except (ValueError, RecursionError):
+        return ''
+    tag = found.get('tag') if isinstance(found, dict) else None
+    return tag if isinstance(tag, str) and FIELDS['tag'].match(tag) else ''
+
+
 def signed_manifest():
     """The manifest of the latest release: read, its signature verified with a key in KEYS, and every
     field it must have checked. Its fields, and 'key', the key's name; Unsigned when it is not to be
@@ -218,7 +229,11 @@ def signed_manifest():
     try:
         data = release_bytes('', MANIFEST, MANIFEST_MAX)
         missing = MANIFEST + '.sig'
-        signature = release_bytes('', missing, 64)
+        # its signature by the tag the manifest names, not through 'latest' a second time: a release
+        # published between the two reads paired one release's manifest with another's signature, and
+        # the check cried tampering until the next one (os-xgs-npu's release check, 2026-11-07, K9).
+        # The tag only says where to look; the signature still decides.
+        signature = release_bytes(named_tag(data), missing, 64)
     except urllib.error.HTTPError as error:
         if error.code == 404:
             raise Unsigned('%s is not signed yet: it has no %s' % (what, missing)) from error
