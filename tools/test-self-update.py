@@ -273,7 +273,9 @@ check('K9: ... and none under its tag: not signed yet, as before', run('check')[
 # a manifest nested deeper than the parser goes: refused by its signature, never the check ended by it
 publish('v1.0.9', owner)
 with open(os.path.join(RELEASES, 'latest', 'download', 'release.json'), 'wb') as f:
-    f.write(b'[' * 5000)
+    # as large as a manifest may be (self-update.py's MANIFEST_MAX): 5000 deep is a ValueError on Python 3.12
+    # and later, which the code before the fix caught too, so CI's Python passed it without the fix
+    f.write(b'[' * (64 << 10))
 check('a manifest nested too deep to parse: refused by its signature, the check answers',
       'does not verify' in (run('check')[1].get('message') or ''), True)
 
