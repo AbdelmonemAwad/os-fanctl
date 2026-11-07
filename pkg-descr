@@ -49,9 +49,11 @@ Plugin Changelog
 
 1.1.7
 
-* Signed releases: a release is installed only as its owner signed it
-* self-update.py: the latest release's signature read by the tag its
-  manifest names
+* an update installed only as its owner signed it: the release's
+  manifest checked with the release key this plugin carries, and the
+  archive's SHA-256 and size the signed ones
+* the latest release's signature read by the tag its manifest names,
+  and a manifest too deep to parse refused by its signature
 
 1.1.6
 
