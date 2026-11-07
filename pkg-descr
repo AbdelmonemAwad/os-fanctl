@@ -47,6 +47,12 @@ and what is wanted in it is a measurement rather than a datasheet.
 Plugin Changelog
 ================
 
+1.1.7
+
+* Signed releases: a release is installed only as its owner signed it
+* self-update.py: the latest release's signature read by the tag its
+  manifest names
+
 1.1.6
 
 * Board fan curve: on a board built on AMDA0202 - the XGS 2100, 2300,
