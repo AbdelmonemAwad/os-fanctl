@@ -47,6 +47,11 @@ and what is wanted in it is a measurement rather than a datasheet.
 Plugin Changelog
 ================
 
+1.1.8
+
+* Sensors as shipped follow the model's fans; npu and inlet can be chosen
+  by name
+
 1.1.7
 
 * an update installed only as its owner signed it: the release's
