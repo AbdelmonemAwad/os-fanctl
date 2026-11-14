@@ -202,6 +202,7 @@
  "processor cores",
  "ACPI thermal zones",
  "drives",
+ "network coprocessor",
  "(not on this machine)",
  "The settings were saved, but the service did not take them.",
  "Hottest",

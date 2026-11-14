@@ -93,16 +93,27 @@
                 the sensors line of the safety contract and the fans go back to the hardware,
                 because a decision made from a sensor that is not answering is a guess.
 
+                The default below is not a choice, and the daemon does not take it for one
+                (os-fanctl #57): left as it is, the groups followed are the ones the hardware
+                table names for the machine's fans, and a group of them of which the decision
+                reads no sensor on the machine is left out - an XGS 136 has an AMD processor and
+                no chipset sensor, and cpu,pch failed the sensors line there for good.
+                fanctl.py carries this value as MODEL_SENSORS; change the two together.
+
                 The mask is the whole of GROUPS in sensors.py and has to stay that way. The
                 discovery finds drives, board inputs, network chips and memory modules on
                 machines that have them; a mask narrower than what can be discovered is a
-                sensor the page can see in the list and refuse to save.
+                sensor the page can see in the list and refuse to save. npu and inlet are the
+                network coprocessor's die and the chassis inlet air of the XGS appliances
+                (sensors.py read_npu(), read_cpld()); they were missing from the mask until
+                os-fanctl #57's default made them groups a machine follows, and an owner could
+                not choose them by name.
             -->
             <sensors type="CSVListField">
                 <Required>Y</Required>
                 <Default>cpu,pch</Default>
                 <MaskPerItem>Y</MaskPerItem>
-                <Mask>/^(cpu|pch|acpi|nvme|drive|board|nic|dimm|other)$/</Mask>
+                <Mask>/^(cpu|pch|acpi|nvme|drive|board|nic|dimm|npu|inlet|other)$/</Mask>
                 <ValidationMessage>Choose from the sensor groups this machine reports.</ValidationMessage>
             </sensors>
             <!--

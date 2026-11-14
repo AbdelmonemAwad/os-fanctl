@@ -271,7 +271,7 @@ table says should have a fan turning on it.
 | `enabled` | off | nothing runs until it is on |
 | `mode` | **monitor** | monitor writes nothing, ever; `curve` and `manual` write |
 | `channels` | empty | which channels may be driven; empty means none |
-| `sensors` | `cpu,pch` | which groups to follow — the **hottest** among them, never an average |
+| `sensors` | `cpu,pch` | which groups to follow — the **hottest** among them, never an average. Left as shipped it is not a choice: the groups followed are the ones the matched table entry names for its fans, less pch, acpi and board where the decision reads no sensor of them on that machine; any other group it names and has not read yet is missing - the fans staying with the hardware - until it has been absent over 30 readings and 300 s (os-fanctl #57) |
 | `interval` | 10 s | how often a decision is made |
 | `floor_duty` | 40% | the owner's own floor, on top of the measured one; can only raise it |
 | `manual_duty` | 70% | what `manual` holds, raised to the floor if below it |
