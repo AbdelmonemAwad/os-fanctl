@@ -2387,7 +2387,9 @@
             'cpu': "{{ lang._('processor cores') }}",
             'pch': "{{ lang._('chipset') }}",
             'acpi': "{{ lang._('ACPI thermal zones') }}",
-            'nvme': "{{ lang._('drives') }}"
+            'nvme': "{{ lang._('drives') }}",
+            'npu': "{{ lang._('network coprocessor') }}",
+            'inlet': "{{ lang._('inlet air') }}"
         };
 
         /* The form is loaded only after the probe has answered, and that ordering is the whole

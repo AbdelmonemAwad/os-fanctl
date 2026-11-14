@@ -158,6 +158,9 @@ import time
 #          These are the ones whose physical attachment is unknown.
 #   nic    network controllers that publish a die temperature.
 #   dimm   memory modules (jedec_dimm and friends).
+#   npu    the network coprocessor of an XGS appliance: its die over the CPLD
+#          or octep, or its own thermal zones over its link (read_npu()).
+#   inlet  the chassis inlet air, where the CPLD publishes it (XGS 3300).
 #   other  a temperature this file found and could not classify. It is shown,
 #          because a reading nobody has named is still a reading, and it is
 #          never a default curve input.
@@ -1967,6 +1970,101 @@ def groups_from(text):
     return wanted
 
 
+# The groups a host can truly lack, so that a shipped default naming them is left without them at
+# once: pch, which an AMD processor has no pchtherm(4) for (os-fanctl #57, the XGS 136); acpi, which
+# a firmware without thermal zones does not publish; and board, the super-I/O's own inputs, which the
+# daemon's reading never carries (read() without include_superio) though the page's does.
+MAY_BE_ABSENT = ('pch', 'acpi', 'board')
+
+# Any other group the plugin named - the model's table above all, which names it for that machine -
+# of which no sensor has appeared yet is reported missing, and left out only once it has been absent
+# from ABSENT_READINGS readings in a row spanning ABSENT_SECONDS at least. Some sensors come late:
+# the XGS 136's npu group is read over the coprocessor's link (read_npu()), and the XGS 3300's npu
+# and inlet from the CPLD's copy that a feeder fills, neither there in the first readings after a
+# boot while the coprocessor comes up. Thirty readings - five minutes at the shipped ten-second
+# interval - and five minutes whatever the interval, which is the time os-xgs-npu's boot hooks give
+# the coprocessor to come up (twenty tries fifteen seconds apart): a coprocessor that is coming up
+# has been read by then, and until then the sensors line fails and the fans stay with the hardware,
+# where they were. Five minutes on, a group still never seen is taken for one this host lacks.
+ABSENT_READINGS = 30
+ABSENT_SECONDS = 300.0
+
+
+class GroupWatch:
+    """What the daemon keeps across its readings for on_host(): every group seen since it started,
+    and for each group the plugin named and never saw, how many readings in a row lacked it and the
+    time of the first of them. One-shot verbs start with an empty one."""
+
+    def __init__(self):
+        self.seen = set()
+        self.absent = {}
+        self.last_at = None
+
+    def clear(self):
+        self.seen.clear()
+        self.absent.clear()
+        self.last_at = None
+
+
+def on_host(reading, wanted, watch=None):
+    """The groups in `wanted` that a decision follows, in the order given.
+
+    For a list the plugin chose and never for one the owner did. decide() reports a chosen
+    group with no sensor as missing, and that is the right answer to a choice. A shipped
+    default is a guess about a machine nobody here has seen, and a group in it that this
+    machine does not have is the guess being wrong, not a sensor that stopped: os-fanctl #57,
+    an XGS 136, whose AMD processor has no pchtherm(4), so the shipped cpu,pch failed the
+    sensors line on pch for good.
+
+    A group is on this machine when the reading carries any sensor of it, whether or not that
+    sensor gave a number this time. A node discovery found that did not answer is still a
+    sensor this machine has, so its group stays and decide() reports it missing - the
+    contract's sixth line working for a default as it does for a choice.
+
+    A group without a sensor in the reading is left out at once only where a host can truly lack
+    it (MAY_BE_ABSENT). Any other stays, so decide() reports it missing, until `watch` has seen it
+    absent from ABSENT_READINGS readings in a row over ABSENT_SECONDS: a sensor that comes late is
+    missing meanwhile, not quietly left out while the contract passes on the others. Without a
+    watch - one reading judged alone - it stays and is missing.
+
+    `watch` is a GroupWatch the caller keeps: every group found is added to its seen set, and a
+    group in it counts as on this machine. The daemon keeps one for its life, because some
+    sensors leave the reading altogether when they stop instead of staying in it unread - the
+    coprocessor's, read over its link or from a driver's copy that empties when its feeder
+    stops (read_npu(), read_cpld(), _HELD) - and a group that went that way is a group this
+    machine has that stopped answering, not one it never had. A reading is counted once, by its
+    time ('at'), however often it is judged.
+    """
+    here = set(entry.get('group') for entry in reading.get('sensors', []))
+    at = reading.get('at')
+    fresh = True
+    if watch is not None:
+        watch.seen.update(here)
+        here = watch.seen
+        fresh = at is None or at != watch.last_at
+        watch.last_at = at
+    followed = []
+    for group in wanted:
+        if group in here:
+            if watch is not None:
+                watch.absent.pop(group, None)
+            followed.append(group)
+        elif group in MAY_BE_ABSENT:
+            continue
+        elif watch is None:
+            followed.append(group)
+        else:
+            count, first = watch.absent.get(group, (0, at))
+            if fresh:
+                count += 1
+            watch.absent[group] = (count, first)
+            lacked = (count >= ABSENT_READINGS and at is not None and first is not None
+                      and at - first >= ABSENT_SECONDS)
+            if not lacked:
+                followed.append(group)
+    return followed
+
+
 def decide(reading, wanted):
     """The temperature a fan decision should be made from, and where from.
 
@@ -2139,6 +2237,10 @@ def _cli():
 
     thirty minutes, and it is meant to be left going while somebody makes the
     machine hot and lets it cool again.
+
+    The groups given here are taken as written, as an owner's choice is. What the
+    contract follows for a setting left as shipped comes through the hardware
+    table, which this file does not read: `fanctl.py decide` answers that.
     """
     import sys
 

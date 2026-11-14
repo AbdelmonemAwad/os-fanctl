@@ -48,6 +48,25 @@ jobs:
       - name: self-update.py takes a release only as signed
         run: python3 tools/test-self-update.py
 
+  sensor-groups:
+    name: sensor groups
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # The groups an owner can choose are one list in sensors.py, the model's mask and the page,
+      # and a choice of any of them - npu and inlet included (os-fanctl #57) - is followed as
+      # written by the contract, the loop and `fanctl.py decide`. Synthetic readings only.
+      - name: Every sensor group can be chosen, and a choice is followed
+        run: python3 tools/test-sensor-groups.py
+
+      # The setting left as shipped (os-fanctl #57): the groups the model's table names are
+      # followed, pch, acpi and board left out where nothing of them is read, any other group
+      # missing until absent over 30 readings and 300 s, and `fanctl.py decide` without --chosen.
+      # Synthetic readings only.
+      - name: A setting left as shipped follows the table's groups
+        run: python3 tools/test-default-sensors.py
+
   syntax:
     name: syntax
     runs-on: ubuntu-latest

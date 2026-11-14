@@ -45,6 +45,9 @@
         fanctl.py restart           stop, then start
         fanctl.py daemon            the loop itself; started by `start`
         fanctl.py diagnostics       probe and status in one answer, for the page
+        fanctl.py decide [GROUPS]   the sensors line of the contract for one sensors
+                                    setting, from this machine and the table
+                                    alone: no config.xml, nothing written.
 
     ---------------------------------------------------------------------------
 
@@ -365,6 +368,14 @@ def match_model(table=None, fields=None):
     return 'generic', models.get('generic', {})
 
 
+# The sensors setting as the model ships it (FanCtl.xml, <sensors><Default>), which a save of the
+# settings page that never touched that field writes into config.xml. That value is the plugin's
+# word and not the owner's - as the table's defaults.sensors is, which is what settings() holds
+# while config.xml has no sensors at all - and sensor_groups() takes both for what they are. A copy
+# of the model's value, so the comment beside it in FanCtl.xml names this file.
+MODEL_SENSORS = 'cpu,pch'
+
+
 def settings(root=None):
     """The plugin's settings, with the table's defaults behind every one.
 
@@ -390,6 +401,9 @@ def settings(root=None):
         'step': int(defaults.get('step', 5)),
         'points': defaults.get('points', '40:60,50:75,60:90,70:100'),
         'sensors': defaults.get('sensors', 'cpu,pch,acpi'),
+        # Whether the owner chose the groups above, or they are still as shipped. See
+        # MODEL_SENSORS and sensor_groups().
+        'sensors_chosen': False,
         'channels': '',
         'accept_unmeasured': False,
         'board_curve': 'standard',
@@ -421,6 +435,12 @@ def settings(root=None):
         found = text(name)
         if found is not None:
             values[name] = found.strip()
+
+    # Compared as written, case and spaces aside, and not through sensors.groups_from(), which
+    # drops a name it does not know: 'cpu,pch,typo' is somebody's choice, not the shipped value.
+    written = text('sensors')
+    values['sensors_chosen'] = written is not None and ','.join(
+        part.strip().lower() for part in written.split(',') if part.strip()) != MODEL_SENSORS
 
     # Every bound here is the bound the model also enforces. Two copies of a
     # rule can drift, so the comment beside each one in FanCtl.xml names this
@@ -1209,6 +1229,94 @@ def baseline_covers(channels, max_age=3600.0):
     return (time.time() - document.get('at', 0)) <= max_age
 
 
+# Every sensor group found on this machine since this process started, and how long each group a
+# default names has been absent. One-shot verbs start with it empty and judge one reading; the
+# daemon keeps it for its life. See sensors.on_host().
+_groups_seen = sensors.GroupWatch()
+
+
+def sensor_groups(options, entry, reading):
+    """What a decision follows, and on whose word.
+
+    Returns {'groups': [...], 'chosen': bool, 'left_out': [...], 'named_by': 'owner' | 'table' |
+    'setting'}.
+
+    Chosen on the settings page, the groups are the owner's and are followed as written: a group
+    this machine does not report is missing, the sensors line fails and the fans stay with the
+    hardware, which is what the page says beside the setting. That is unchanged.
+
+    Still as shipped (see MODEL_SENSORS), they are a guess, and os-fanctl #57 is that guess failing
+    for good: cpu,pch on an XGS 136, whose AMD processor has no pchtherm(4), so the sensors line
+    failed on pch whatever else held - on a machine whose own entry in the table names cpu, board
+    and npu for its fan. So the groups come from the matched entry, every group its fans name in
+    the order they first appear, and from the setting only where the entry names none. A group of
+    those that the reading has no sensor of at all is left out instead of being reported missing
+    only where a host can truly lack it - pch, acpi, and board in the daemon's view - and any
+    other, a table-named npu among them, is missing until it has been absent long enough to be
+    taken for one this host lacks (sensors.ABSENT_READINGS, ABSENT_SECONDS). sensors.on_host()
+    draws that line, and it is drawn at a sensor's existence and not at its answer, so a default
+    still fails the line when a sensor it follows stops answering.
+    """
+    wanted = sensors.groups_from(options['sensors'])
+    if options.get('sensors_chosen', True):
+        return {'groups': wanted, 'chosen': True, 'left_out': [], 'named_by': 'owner'}
+
+    named = sensors.groups_from(','.join(str(group) for fan in entry.get('fans') or []
+                                         for group in fan.get('sensors') or []))
+    named_by = 'table' if named else 'setting'
+    named = named or wanted
+    groups = sensors.on_host(reading, named, _groups_seen)
+    return {'groups': groups, 'chosen': False,
+            'left_out': [group for group in named if group not in groups], 'named_by': named_by}
+
+
+def _followed_note(entry, followed):
+    """The sentence a default adds to the sensors line: what was followed, and what was left out.
+
+    "The decision reads", and not "this machine has": the daemon decides from a reading without
+    the super-I/O's own inputs (sensors.read()), while the page beside it shows them, so an XGS
+    136's board group is left out of the loop's default and on the page at the same moment.
+    """
+    whose = ('those the table names for %s' % (entry.get('display') or 'this machine')
+             if followed['named_by'] == 'table' else 'its own')
+    groups, left = followed['groups'], followed['left_out']
+    if not groups:
+        return (' The setting is still as shipped, so the groups followed are %s, and the decision '
+                'reads no sensor of any of them on this machine: %s.'
+                % (whose, ', '.join(left) or 'none'))
+    note = (' The setting is still as shipped, so the groups followed are %s: %s'
+            % (whose, ', '.join(groups)))
+    if left:
+        note += ('; %s %s left out, as the decision reads no sensor of %s on this machine'
+                 % (', '.join(left), 'is' if len(left) == 1 else 'are',
+                    'it' if len(left) == 1 else 'them'))
+    return note + '.'
+
+
+def sensors_line(options, entry, reading):
+    """The contract's sixth line: every temperature the decision needs is being read right now.
+
+    Beside the sentence it carries what was followed and why - groups, chosen, left_out, named_by
+    and missing - so that the status document, and `fanctl.py decide`, show a group left out of a
+    default as plainly as a missing one. The page reads name, ok and detail, and nothing else.
+    """
+    followed = sensor_groups(options, entry, reading)
+    celsius, names, missing = sensors.decide(reading, followed['groups'])
+    ok = celsius is not None and not missing
+    if ok:
+        detail = '%.1f C, read from %s.' % (celsius, ', '.join(names))
+    else:
+        detail = ('a temperature the decision needs is not being read: %s.'
+                  % (', '.join(missing) or ('none of the chosen sensors answered'
+                                            if followed['chosen'] else
+                                            'none of the sensors it follows answered')))
+    if not followed['chosen']:
+        detail += _followed_note(entry, followed)
+    line = {'name': 'sensors', 'ok': ok, 'detail': detail, 'missing': missing}
+    line.update(followed)
+    return line
+
+
 def contract(options, entry, found, measured, reading, channels, capture_problem=''):
     """The six conditions, each with a sentence, in the order they are checked.
 
@@ -1322,16 +1430,7 @@ def contract(options, entry, found, measured, reading, channels, capture_problem
                   'apart, so it is not driven.' % (', '.join(stalled) or 'nothing is selected'),
     })
 
-    wanted = sensors.groups_from(options['sensors'])
-    celsius, names, missing = sensors.decide(reading, wanted)
-    lines.append({
-        'name': 'sensors',
-        'ok': celsius is not None and not missing,
-        'detail': ('%.1f C, read from %s.' % (celsius, ', '.join(names)))
-                  if celsius is not None and not missing else
-                  'a temperature the decision needs is not being read: %s.'
-                  % (', '.join(missing) or 'none of the chosen sensors answered'),
-    })
+    lines.append(sensors_line(options, entry, reading))
 
     return lines
 
@@ -2014,6 +2113,12 @@ def daemon():
 
                 decisions = {}
                 trouble = ''
+                # A channel the table names no sensors for follows the groups the contract's
+                # sensors line has just judged, and not the setting's own words, which for a
+                # setting still as shipped are not what is followed: see sensor_groups(). One
+                # list for both, so the line never passes on groups this loop does not follow.
+                followed = next((line['groups'] for line in lines if line['name'] == 'sensors'),
+                                sensors.groups_from(options['sensors']))
 
                 for name in channels:
                     fan = next((item for item in found['channels'] if item['name'] == name), {})
@@ -2034,7 +2139,7 @@ def daemon():
                     # page cannot set the second below the first.
                     effective = max(int(floor), int(options['floor_duty']))
 
-                    groups = fan.get('sensors') or sensors.groups_from(options['sensors'])
+                    groups = fan.get('sensors') or followed
                     celsius, from_names, missing = sensors.decide(reading, groups)
                     if celsius is None:
                         trouble = ('%s: the temperature it follows (%s) is not being read.'
@@ -2947,6 +3052,59 @@ def diagnostics():
     return {'status': 'ok', 'probe': probe(), 'state': status()}
 
 
+DECIDE_USAGE = 'usage: fanctl.py decide [--chosen] [--superio] [GROUPS]'
+
+
+def decide(argv):
+    """The contract's sensors line for one sensors setting, from this machine and the table alone.
+
+        fanctl.py decide [--chosen] [--superio] [GROUPS]
+
+    GROUPS stands where config.xml's sensors setting would; with none given the setting is
+    absent, as on a machine whose settings page was never saved. Nothing else is read from
+    config.xml and nothing is written anywhere, so a copy of these scripts can be run beside an
+    installed, running plugin and answer what its contract would.
+
+    --chosen takes GROUPS as the owner's choice even where it is the shipped value, which is how
+    every setting was taken before os-fanctl #57 - one copy answers both ways. --superio adds the
+    chip's own temperature inputs, as the page reads them; the daemon decides without them (see
+    sensors.read()), so without it this is the daemon's answer.
+    """
+    chosen = superio = False
+    groups = None
+    for arg in argv:
+        if arg == '--chosen':
+            chosen = True
+        elif arg == '--superio':
+            superio = True
+        elif groups is None and not arg.startswith('-'):
+            groups = arg
+        else:
+            return {'status': 'failed', 'detail': DECIDE_USAGE}
+
+    # A config.xml holding that one setting, or none, read by the same settings() the daemon reads
+    # the real one with: what counts as a choice here is exactly what counts as one there.
+    root = ET.fromstring('<opnsense><OPNsense><FanCtl><general/></FanCtl></OPNsense></opnsense>')
+    if groups is not None:
+        ET.SubElement(root.find(GENERAL), 'sensors').text = groups
+    options = settings(root)
+    if chosen:
+        options['sensors_chosen'] = True
+
+    key, entry = match_model(load_table())
+    reading = sensors.read(include_superio=superio)
+    return {
+        'status': 'ok',
+        'at': time.time(),
+        'machine': dict(smbios(), model=key, display=entry.get('display', '')),
+        'setting': options['sensors'],
+        'line': sensors_line(options, entry, reading),
+        'present': reading.get('present') or [],
+        'sensors': [{'name': item.get('name'), 'group': item.get('group'),
+                     'celsius': item.get('celsius')} for item in reading.get('sensors') or []],
+    }
+
+
 # ---------------------------------------------------------------------------
 # Command line
 # ---------------------------------------------------------------------------
@@ -2957,8 +3115,20 @@ def _print(document):
 
 
 def main(argv):
-    ensure_dirs()
     verb = argv[1] if len(argv) > 1 else 'status'
+
+    if verb == 'decide':
+        # Ahead of ensure_dirs(), on purpose: this verb writes nothing anywhere, not even a
+        # directory, which is what lets it run from a copy of these scripts on a machine that
+        # is not to be changed.
+        try:
+            result = decide(argv[2:])
+        except Exception as failure:                    # noqa: BLE001 - reported, as below
+            result = {'status': 'failed', 'detail': 'fanctl failed: %s' % failure}
+        _print(result)
+        return 0 if result['status'] == 'ok' else (2 if result['detail'] == DECIDE_USAGE else 1)
+
+    ensure_dirs()
 
     if verb == 'daemon':
         # SIGHUP and SIGQUIT alongside the two obvious ones. Neither is sent by
