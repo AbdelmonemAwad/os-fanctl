@@ -49,8 +49,14 @@ Plugin Changelog
 
 1.1.8
 
-* Sensors as shipped follow the model's fans; npu and inlet can be chosen
-  by name
+* the sensors setting as shipped (cpu,pch) is no longer taken for a
+  choice: the groups followed are the ones the model's entry in the
+  hardware table names for its fans, and a group of which no sensor is
+  read on the machine is left out, not missing - an XGS 136 or XGS 3300
+  has no chipset sensor, and "missing pch" kept control from being
+  turned on; a setting the owner changed is followed as before
+* npu (the network coprocessor's die) and inlet (the chassis inlet air)
+  can be chosen by name
 
 1.1.7
 
