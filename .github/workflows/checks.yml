@@ -77,6 +77,12 @@ jobs:
       - name: The board curve's return to the standard curve
         run: python3 tools/test-board-curve.py
 
+      # One card for the memory and one for the hottest port PHY, each with the record's lowest,
+      # mean and highest: the page's fold and the widget's lines and ranges, run in the runner's
+      # node with readings and a record written in the test.
+      - name: The memory's card and the hottest port PHY's, on the page and the widget
+        run: python3 tools/test-readings-cards.py
+
   syntax:
     name: syntax
     runs-on: ubuntu-latest

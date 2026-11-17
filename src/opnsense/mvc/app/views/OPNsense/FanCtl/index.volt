@@ -358,8 +358,53 @@
         let show_silent = false;
         /* The processor's cores, one row until asked for: on most of these machines every core
            reads the same number, and eight identical bars said nothing the hottest one did not. */
-        /* which folded groups of sensors are open, by kind - see FOLD in draw_rows() */
+        /* which folded groups of sensors are open, by kind - see FOLD */
         const show_fold = {};
+
+        /* Sensors of one kind as one card - the hottest, the list being sorted hottest first - and
+           the rest behind a toggle, where there are enough of them to be worth folding. The
+           processor's cores were the only kind folded, and the XGS 136, which also reports its
+           coprocessor's four cores and the PHY behind each of twelve ports, drew thirty cards
+           where the XGS 3300 draws six.
+
+           `at` is how many make a fold. Three cores of a processor or of the coprocessor, which on
+           these machines mostly read alike. Two port PHYs or memory modules, since 2026-11-17,
+           because the card a fold draws is the hottest of the kind with its own record under it -
+           the lowest, the mean and the highest of the window - and that is the card these two are
+           read for: an XGS 3300 without an expansion module has two PHYs, and drew a card for each
+           and none that said which was the hotter. `hottest` names such a card for what it is;
+           `title` is the name a fold of cores keeps, with its count. */
+        const FOLD = {
+            cpu_core: {at: 3, title: "{{ lang._('processor cores') }}"},
+            npu_core: {at: 3, title: "{{ lang._('coprocessor cores') }}"},
+            phy: {at: 2, hottest: "{{ lang._('hottest of {n} port PHYs') }}"},
+            dimm: {at: 2, hottest: "{{ lang._('hottest of {n} memory modules') }}"}
+        };
+
+        /* {kind: how many} for each kind that folds in this reading: its sensors not proved
+           constant, when there are at least FOLD[kind].at of them. */
+        function fold_counts(sensors, constant) {
+            const members = {};
+            sensors.forEach(function (sensor) {
+                const kind = String(sensor.kind);
+                if (FOLD[kind] && constant.indexOf(String(sensor.name || '')) === -1) {
+                    members[kind] = (members[kind] || 0) + 1;
+                }
+            });
+            const counts = {};
+            Object.keys(members).forEach(function (kind) {
+                if (members[kind] >= FOLD[kind].at) {
+                    counts[kind] = members[kind];
+                }
+            });
+            return counts;
+        }
+
+        function fold_title(kind, count) {
+            const fold = FOLD[kind];
+            return fold.hottest ? fc_fill(fold.hottest, {n: fc_num(count)})
+                : fold.title + ' (' + count + ')';
+        }
 
         /* The incident that has been read. Keyed on the incident itself, so a NEW one appears
            even after an old one was dismissed. */
@@ -1803,23 +1848,7 @@
 
             const seen_names = {};
             let frozen = 0;
-            /* Sensors of one kind as one card - the hottest, the list being sorted hottest first -
-               and the rest behind a toggle, where there are enough of them to be worth folding.
-               The processor's cores were the only kind folded, and the XGS 136, which also
-               reports its coprocessor's four cores and the PHY behind each of twelve ports, drew
-               thirty cards where the XGS 3300 draws six. */
-            const FOLD = {
-                cpu_core: "{{ lang._('processor cores') }}",
-                npu_core: "{{ lang._('coprocessor cores') }}",
-                phy: "{{ lang._('port PHYs') }}"
-            };
-            const members = {};
-            sensors.forEach(function (sensor) {
-                const kind = String(sensor.kind);
-                if (FOLD[kind] && constant.indexOf(String(sensor.name || '')) === -1) {
-                    members[kind] = (members[kind] || 0) + 1;
-                }
-            });
+            const folds = fold_counts(sensors, constant);
             const folded = {};
             sensors.forEach(function (sensor) {
                 const name = String(sensor.name || '');
@@ -1862,14 +1891,14 @@
                     card: true
                 };
                 const kind = String(sensor.kind);
-                if (FOLD[kind] && members[kind] >= 3) {
+                if (folds[kind]) {
                     if (!folded[kind]) {
                         /* the hottest of the kind stands for them all in one card, and the toggle
                            that opens the rest is in that card; the rest are a grid of their own
                            under the cards */
                         const open = !!show_fold[kind];
                         const $summary = row($.extend({}, one, {
-                            name: FOLD[kind] + ' (' + members[kind] + ')'
+                            name: fold_title(kind, folds[kind])
                         })).appendTo(temps.body);
                         $('<button type="button" class="fc-strip fc-card-toggle"/>')
                             .append($('<i class="fa fa-fw"/>').addClass(open ? 'fa-angle-up' : 'fa-angle-down'))

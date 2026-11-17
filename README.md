@@ -70,7 +70,12 @@ Everything else comes from primary sources and is marked where it matters. On 20
   page, so its cards show the speed of that second, one card a fan, and the bar's top is the
   measured 13,500. Where the coprocessor's memory module
   has a temperature sensor, os-xgs-npu's driver holds that reading too, and it is listed as a
-  memory module.
+  memory module; so are its port chips - the switch, the SFP+ cages' PHY and an expansion module's
+  PHY - listed as port PHYs. Since 2026-11-17 the page gives the memory a card and the hottest of
+  the port PHYs one, each with the record's lowest, mean and highest over the window chosen, and
+  the dashboard panel gives their two lines the last day's; memory modules and port PHYs are
+  offered as temperatures to follow wherever a machine reports them, and never followed unless
+  chosen.
 - **Keeps a record**, once a minute, of every sensor and every fan: the lowest, the highest and
   the time-weighted mean over the last hour, day, week and month, and how long each sensor spent
   above each rung of a fixed ladder. One sample costs 1.4 ms and the whole record is bounded at

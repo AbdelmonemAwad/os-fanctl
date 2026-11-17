@@ -110,19 +110,24 @@ def _run(directory, script, name):
     path = os.path.join(directory, name)
     with open(path, 'w', encoding='utf-8', newline='\n') as handle:
         handle.write(script)
-    done = subprocess.run([node(), path], capture_output=True, text=True, timeout=60)
+    done = subprocess.run([node(), path], capture_output=True, text=True, encoding='utf-8',
+                          timeout=60)
     if done.returncode != 0:
         raise RuntimeError('node failed:\n%s%s' % (done.stdout, done.stderr))
     return json.loads(done.stdout.strip().splitlines()[-1])
 
 
 def page(names, expressions, path=PAGE):
-    """[the value of each expression], in node, beside the page's parts of these names; or None."""
+    """[the value of each expression], in node, beside the page's parts of these names; or None.
+    An expression that throws is {'error': its message} in the list, so the check that asked for it
+    fails with that message and the others are still answered."""
     if not node():
         return None
     text = render(path)
+    guarded = ['(() => { try { return %s; } catch (error) { return {error: String(error)}; } })()'
+               % expression for expression in expressions]
     script = '\n'.join([JQUERY] + [part(text, name) for name in names] +
-                       ['console.log(JSON.stringify([%s]));' % ', '.join(expressions)])
+                       ['console.log(JSON.stringify([%s]));' % ', '.join(guarded)])
     directory = tempfile.mkdtemp(prefix='fanctl-page-')
     try:
         return _run(directory, script, 'page.js')

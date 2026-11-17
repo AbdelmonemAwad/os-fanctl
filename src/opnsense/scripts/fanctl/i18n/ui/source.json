@@ -165,7 +165,8 @@
  "inlet air",
  "the coprocessor",
  "coprocessor cores",
- "port PHYs",
+ "hottest of {n} port PHYs",
+ "hottest of {n} memory modules",
  "coprocessor dies",
  "board inputs",
  "watched only",
@@ -259,5 +260,10 @@
  "the standard curve, held while a temperature it follows is not read",
  "the quiet curve",
  "This board drives its fans itself: only Enabled and Board fan curve apply to it. Everything else on this tab is for a fan on a chip this plugin can drive.",
- "This board drives its fans itself, so there is no duty here for a floor to be measured against."
+ "This board drives its fans itself, so there is no duty here for a floor to be measured against.",
+ "hottest of %s port PHYs",
+ "hottest of %s memory modules",
+ "last day %s",
+ "last hour %s",
+ "%s of the window was watched"
 ]
