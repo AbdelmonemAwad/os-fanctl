@@ -152,9 +152,14 @@ its cool figure. Until 2026-11-17 the coprocessor's die was the only one.
 | port PHYs | 95 C | 88 C | the hottest of the switch (88E6193X), the SFP+ cages' PHY (88X5113) and an expansion module's PHY - an 88X5113 too on the 4x10G module AMDA0207-0001, and not known on any other module. Ten degrees under the 88X5113's 105 C maximum junction (Marvell MV-S110852-U0 Rev C, Table 61), and five under the 100 C Linux sets as the alarm of the switch family's PHY sensor, a driver's default; the switch's own limit is not public. Nor is it settled which of the switch's registers holds its temperature: the value os-xgs-npu holds for it is read from page 6, register 28, where Linux reads that family's PHY temperature at register 27 and keeps 28 for the alarm. |
 
 The figures are the hardware table's (`fans.json`, `board_curve`), and the settings help says them.
-So far they have been measured at rest only - on the second XGS 3300, from 2026-10-27 to
-2026-11-17, the memory at 45.8 to 52.6 C, the switch at 58 to 61, the SFP+ cages' PHY at 60.0 to
-63.2 and the module's PHY at 49.1 to 53.3 - and not yet with the ports under load.
+At rest they were measured on the second XGS 3300 from 2026-10-27 to 2026-11-17: the memory at
+45.8 to 52.6 C, the switch at 58 to 61, the SFP+ cages' PHY at 60.0 to 63.2 and the module's PHY at
+49.1 to 53.3. Under load on 2026-11-17 - the Quiet curve, TCP at line rate for 30 minutes in at F2
+and out of Port8 to the XGS 136, twice (09:12-09:42 and 12:38-13:08 UTC) - the highest readings were
+the coprocessor 83.5 and 84.6 C, the memory 54.9 and 55.2, the SFP+ cages' PHY 68.1 and 69.9, the
+switch 64.1 both times and the module's PHY 50.5 and 50.1. Each stayed under its figure above, so
+the quiet curve stayed on in every reading. The second run, photographed:
+[load-2026-11-17.png](docs/images/measurements/load-2026-11-17.png).
 
 **A reading that cannot be taken changes nothing**, as it changed nothing while the coprocessor's
 was the only one (1.1.8): it neither starts the return to the standard curve nor ends it. It is left
