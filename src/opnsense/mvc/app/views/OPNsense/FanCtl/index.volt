@@ -1038,11 +1038,13 @@
         }
 
         /* Why the standard curve holds where the quiet one was asked for, one sentence a kind of
-           reason (fanctl.py board_curve(), held_for). */
+           reason (fanctl.py board_curve(), held_for): a reading at its hot figure, by kind; one not
+           yet below its cool figure; and one that held it and has not been read since. */
         const board_held_title = {
             npu: "{{ lang._('standard curve, held: coprocessor hot') }}",
             memory: "{{ lang._('standard curve, held: coprocessor memory hot') }}",
             phy: "{{ lang._('standard curve, held: port PHY hot') }}",
+            warm: "{{ lang._('standard curve, held: not yet below its cool figure') }}",
             unread: "{{ lang._('standard curve, held: a temperature not read') }}"
         };
 
@@ -1060,7 +1062,7 @@
             const order = [];
             const names = {};
             ($.isArray(board.held_for) ? board.held_for : []).forEach(function (item) {
-                const key = item.why === 'unread' ? 'unread' : String(item.kind);
+                const key = item.why === 'hot' ? String(item.kind) : String(item.why);
                 if (board_held_title[key] === undefined) {
                     return;
                 }

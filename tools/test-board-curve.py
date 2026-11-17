@@ -5,13 +5,13 @@
 comes back (fanctl.py board_curve(), since 2026-11-17).
 
 The coprocessor's die was the only reading the rule followed. It follows the coprocessor's memory
-and every port PHY os-xgs-npu's driver holds as well, each against the table's figures; a reading
-this board has given since it started and no longer gives holds the standard curve until it is read
-again, after BOARD_UNREAD_SECONDS; and one never given - a memory module without a sensor, no
-expansion module - is not waited for. Checked here: the figures, in the table, the settings help and
-the README alike; the rule, minute by minute, with the driver's nodes read through a stand-in for
-sysctl(8) and the coprocessor's GPIO line through a stand-in for npu-run.sh; and the page's words
-for a hold, run in node (tools/pagejs.py).
+and every port PHY os-xgs-npu's driver holds as well, each against the table's figures, and a
+reading that cannot be taken changes nothing, as it changed nothing while the coprocessor's was the
+only one: it starts no hold, and one that held the standard curve at the last check holds it until
+it is read again. Checked here: the figures, in the table, the settings help and the README alike;
+the rule, minute by minute, with the driver's nodes read through a stand-in for sysctl(8) and the
+coprocessor's GPIO line through a stand-in for npu-run.sh; and the page's words for a hold, run in
+node (tools/pagejs.py).
 
 Synthetic readings only. Nothing here reads a sysctl, runs kenv or npu-run.sh, opens a port, or
 writes anywhere but a directory of its own that it removes.
@@ -66,8 +66,8 @@ SPEC = ENTRY.get('board_curve') or {}
 
 limits = fanctl.board_limits(SPEC)
 check('the XGS 3300 entry has a board curve', KEY == 'sophos-xgs-3300' and bool(SPEC), KEY)
-check('the table\'s figures: coprocessor 85/78, memory 75/68, port PHYs 85/78',
-      limits == {'npu': (85.0, 78.0), 'memory': (75.0, 68.0), 'phy': (85.0, 78.0)}, limits)
+check('the table\'s figures: coprocessor 85/78, memory 80/75, port PHYs 95/88',
+      limits == {'npu': (85.0, 78.0), 'memory': (80.0, 75.0), 'phy': (95.0, 88.0)}, limits)
 check('every cool figure is below its hot one',
       bool(limits) and all(cool < hot for hot, cool in limits.values()))
 check('the code\'s own figures are the table\'s, for a table that gives none',
@@ -75,8 +75,9 @@ check('the code\'s own figures are the table\'s, for a table that gives none',
 check('a cool figure at or above its hot one is refused',
       fanctl.board_limits({'memory_hot_c': 70, 'memory_cool_c': 70}) is None)
 check('a figure that is not a number is refused', fanctl.board_limits({'phy_hot_c': 'hot'}) is None)
-check('the table says where each figure comes from', all(
-    any(text.startswith(kind + ',') for text in SPEC.get('figures') or [])
+check('the table says where each figure comes from, with the figures it has', all(
+    any(text.startswith('%s, %d and %d C:' % (kind, limits[kind][0], limits[kind][1]))
+        for text in SPEC.get('figures') or [])
     for kind in ('npu', 'memory', 'phy')), [text[:20] for text in SPEC.get('figures') or []])
 
 form = ET.parse(str(FORM)).getroot()
@@ -89,11 +90,15 @@ check('the settings help states the table\'s figures',
           limits['npu'][0], limits['memory'][0], limits['phy'][0],
           limits['npu'][1], limits['memory'][1], limits['phy'][1]],
       stated.groups() if stated else helps)
+check('the settings help says a reading that cannot be taken changes nothing',
+      bool(helps) and 'A reading that cannot be taken changes nothing' in helps[0], helps)
 readme = README.read_text(encoding='utf-8')
 rows = dict((kind, (float(hot), float(cool))) for kind, hot, cool in re.findall(
     r'^\| (coprocessor|memory|port PHYs) \| (\d+) C \| (\d+) C \|', readme, re.M))
 check('the README states the table\'s figures',
       rows == {'coprocessor': limits['npu'], 'memory': limits['memory'], 'port PHYs': limits['phy']}, rows)
+check('the README says a reading that cannot be taken changes nothing',
+      '**A reading that cannot be taken changes nothing**' in readme)
 
 
 # -- The machine, stood in for -----------------------------------------------------------------------
@@ -103,13 +108,24 @@ fanctl.STATE_DIR = WORK + '/db'
 fanctl.RUN_DIR = WORK + '/run'
 fanctl.LOG_DIR = WORK + '/log'
 fanctl.BOARD_CURVE = fanctl.STATE_DIR + '/board-curve.json'
-fanctl.BOARD_SEEN = fanctl.RUN_DIR + '/board-inputs.json'
 
 said = []
 fanctl.log = lambda message, level=None: said.append(message)
 fanctl.match_model = lambda table=None, fields=None: (KEY, ENTRY)
 OPTIONS = {'enabled': True, 'board_curve': 'quiet'}
 fanctl.settings = lambda root=None: dict(OPTIONS)
+
+# Every write of the state file, so that a check can say it was not rewritten.
+written = []
+write_json = fanctl.write_json
+
+
+def counting_write(path, payload, *args, **kwargs):
+    written.append(path)
+    return write_json(path, payload, *args, **kwargs)
+
+
+fanctl.write_json = counting_write
 
 MACHINE = {'npu': 70.0, 'nodes': {}, 'sysctl': True, 'line': 'input', 'answers': True, 'asked': []}
 NAMES = ['dev.octep.0.%desc', 'dev.octep.0.mgmt_start', 'dev.octep.0.temperature.npu',
@@ -157,22 +173,31 @@ fanctl._npu_celsius = lambda: MACHINE['npu']
 REST = {'memory': 52.6, 'switch': 61.1, 'sfp_phy': 63.2, 'module_phy': 49.1}
 
 
-def boot():
-    """A new boot: RUN_DIR emptied, as cleanvar does, and the line back with the board."""
-    shutil.rmtree(fanctl.RUN_DIR, ignore_errors=True)
-    MACHINE['line'] = 'input'
+def fresh(line='input'):
+    """A machine this plugin has not set yet: no state of its own, the line as the board left it."""
+    shutil.rmtree(WORK + '/db', ignore_errors=True)
+    MACHINE['line'] = line
 
 
-def minute(tick, npu=None, **nodes):
+def minute(npu=None, **nodes):
     MACHINE['npu'] = npu
     MACHINE['nodes'] = nodes
     MACHINE['asked'] = []
     del said[:]
-    return fanctl.board_curve(tick=tick)
+    del written[:]
+    return fanctl.board_curve()
 
 
 def state_of(document):
     return {item['name'].rsplit('.', 1)[-1]: item['state'] for item in document.get('inputs') or []}
+
+
+def reasons(document):
+    return [(item['kind'], item['why'], item['name'].rsplit('.', 1)[-1]) for item in document['held_for']]
+
+
+def holds(text):
+    return any('standard curve until' in line for line in text)
 
 
 try:
@@ -188,8 +213,8 @@ try:
           and kinds['sfp_phy'] == ('nic', 'phy', None) and kinds['npu'][1] == 'npu_die', kinds)
 
     # 1. The second XGS 3300 at rest, quiet asked: every reading below its cool figure.
-    boot()
-    doc = minute(1000, npu=77.6, **REST)
+    fresh()
+    doc = minute(npu=77.6, **REST)
     check('at rest: the quiet curve, the line driven low, nothing holds',
           doc['running'] == 'quiet' and doc['gpio'] == 'output' and not doc['held']
           and doc['held_for'] == [] and any(c.startswith('gpioset') for c in MACHINE['asked']), doc['running'])
@@ -197,138 +222,191 @@ try:
           state_of(doc) == {'npu_c': 'cool', 'memory': 'cool', 'switch': 'cool', 'sfp_phy': 'cool',
                             'module_phy': 'cool'}, state_of(doc))
 
-    # 2. The memory reaches its hot figure: the standard curve, the line given back.
-    doc = minute(1060, npu=77.6, **dict(REST, memory=75.0))
-    check('memory at 75.0: the standard curve, the line given back',
+    # 2. The memory at its hot figure, 80 C: the standard curve, the line given back. 79.9 is not it.
+    doc = minute(npu=77.6, **dict(REST, memory=79.9))
+    check('memory at 79.9, under 80: the quiet curve stays', doc['running'] == 'quiet' and not said, said)
+    doc = minute(npu=77.6, **dict(REST, memory=80.0))
+    check('memory at 80.0: the standard curve, the line given back',
           doc['running'] == 'standard' and doc['held'] and doc['gpio'] == 'input', doc['running'])
-    check('memory at 75.0: held for the memory, and said so once',
-          [(item['kind'], item['why']) for item in doc['held_for']] == [('memory', 'hot')]
-          and len(said) == 2 and 'coprocessor memory reads 75.0 C, at or above 75 C' in said[0],
-          said)
+    check('memory at 80.0: held for the memory, hot, and said so once',
+          reasons(doc) == [('memory', 'hot', 'memory')]
+          and len(said) == 2 and 'coprocessor memory reads 80.0 C, at or above 80 C' in said[0], said)
     status = fanctl.board_curve_status(ENTRY, OPTIONS)
-    check('the page\'s document: held, for dev.octep.0.temperature.memory',
-          status['held'] and [item['name'] for item in status['held_for']]
-          == ['dev.octep.0.temperature.memory'], status)
+    check('the page\'s document: held, for dev.octep.0.temperature.memory, hot',
+          status['held'] and [(item['name'], item['why']) for item in status['held_for']]
+          == [('dev.octep.0.temperature.memory', 'hot')], status)
+    doc = minute(npu=77.6, **dict(REST, memory=81.0))
+    check('memory still hot a minute later: the state not written again, nothing said',
+          doc['held'] and fanctl.BOARD_CURVE not in written and not said, (written, said))
 
-    # 3. Below its hot figure and not its cool one: still held. Below the cool one: quiet again.
-    doc = minute(1120, npu=77.6, **dict(REST, memory=70.0))
-    check('memory at 70.0, between 68 and 75: still the standard curve',
+    # 3. Below its hot figure and not its cool one: held, and said to be not yet below its cool
+    #    figure, not hot. Below the cool one, 75 C: quiet again.
+    doc = minute(npu=77.6, **dict(REST, memory=77.0))
+    check('memory at 77.0, between 75 and 80: still the standard curve, nothing said',
           doc['running'] == 'standard' and doc['held'] and not said, said)
-    doc = minute(1180, npu=77.6, **dict(REST, memory=67.9))
-    check('memory at 67.9: the quiet curve again, said once',
+    check('memory at 77.0: held for it as not yet below its cool figure ("warm"), not as hot',
+          reasons(doc) == [('memory', 'warm', 'memory')], doc['held_for'])
+    doc = minute(npu=77.6, **dict(REST, memory=75.0))
+    check('memory at 75.0, its cool figure: still the standard curve', doc['running'] == 'standard')
+    doc = minute(npu=77.6, **dict(REST, memory=74.9))
+    check('memory at 74.9: the quiet curve again, said once',
           doc['running'] == 'quiet' and not doc['held'] and doc['gpio'] == 'output'
-          and any('the quiet curve again' in line for line in said), said)
+          and sum('the quiet curve again' in line for line in said) == 1, said)
 
-    # 4. The hottest port PHY counts, whichever it is.
+    # 4. The hottest port PHY counts, whichever it is, at 95 C, until it is below 88 C.
     for leaf in ('switch', 'sfp_phy', 'module_phy'):
-        doc = minute(1240, npu=77.6, **dict(REST, **{leaf: 85.0}))
-        check('%s at 85.0: the standard curve, held for a port PHY' % leaf,
-              doc['running'] == 'standard' and [(item['kind'], item['why'], item['name'].rsplit('.', 1)[-1])
-                                                for item in doc['held_for']] == [('phy', 'hot', leaf)],
-              doc['held_for'])
-        doc = minute(1300, npu=77.6, **REST)
-        check('%s back at rest: the quiet curve again' % leaf, doc['running'] == 'quiet', doc['running'])
-    doc = minute(1360, npu=77.6, **dict(REST, switch=84.9, sfp_phy=84.9, module_phy=84.9))
-    check('every port PHY at 84.9, under 85: the quiet curve stays', doc['running'] == 'quiet',
+        doc = minute(npu=77.6, **dict(REST, **{leaf: 95.0}))
+        check('%s at 95.0: the standard curve, held for a port PHY' % leaf,
+              doc['running'] == 'standard' and reasons(doc) == [('phy', 'hot', leaf)], doc['held_for'])
+        doc = minute(npu=77.6, **dict(REST, **{leaf: 88.0}))
+        check('%s at 88.0: still held, not yet below its cool figure' % leaf,
+              doc['running'] == 'standard' and reasons(doc) == [('phy', 'warm', leaf)], doc['held_for'])
+        doc = minute(npu=77.6, **dict(REST, **{leaf: 87.9}))
+        check('%s at 87.9: the quiet curve again' % leaf, doc['running'] == 'quiet', doc['running'])
+    doc = minute(npu=77.6, **dict(REST, switch=94.9, sfp_phy=94.9, module_phy=94.9))
+    check('every port PHY at 94.9, under 95: the quiet curve stays', doc['running'] == 'quiet',
           state_of(doc))
-    doc = minute(1420, npu=77.6, **REST)
+    doc = minute(npu=77.6, **REST)
 
     # 5. The coprocessor itself, as before.
-    doc = minute(1480, npu=85.0, **REST)
+    doc = minute(npu=85.0, **REST)
     check('the coprocessor at 85.0: the standard curve, held for it',
-          doc['running'] == 'standard' and [item['kind'] for item in doc['held_for']] == ['npu'],
-          doc['held_for'])
-    doc = minute(1540, npu=77.9, **REST)
+          doc['running'] == 'standard' and reasons(doc) == [('npu', 'hot', 'npu_c')], doc['held_for'])
+    doc = minute(npu=77.9, **REST)
     check('the coprocessor at 77.9: the quiet curve again', doc['running'] == 'quiet', doc['running'])
 
-    # 6. A reading given this boot that goes empty: waited for BOARD_UNREAD_SECONDS, then held.
-    check('a reading empty for 90 s is one the rule cannot see', fanctl.BOARD_UNREAD_SECONDS == 90)
-    empty = dict(REST, memory=None)
-    doc = minute(1600, npu=77.6, **empty)
-    check('memory empty at one check: still quiet, the memory "empty"',
-          doc['running'] == 'quiet' and state_of(doc)['memory'] == 'empty', state_of(doc))
-    doc = minute(1660, npu=77.6, **empty)
-    check('memory empty a minute later: still quiet', doc['running'] == 'quiet', state_of(doc))
-    doc = minute(1720, npu=77.6, **empty)
-    check('memory empty two minutes: the standard curve, held while it is not read',
-          doc['running'] == 'standard' and [(item['kind'], item['why']) for item in doc['held_for']]
-          == [('memory', 'unread')] and 'coprocessor memory has not been read for 120 s' in said[0], said)
-    doc = minute(1780, npu=77.6, **REST)
-    check('memory read again, and cool: the quiet curve again', doc['running'] == 'quiet', doc['running'])
-
-    # 7. A reading empty for seconds between two of the feeder's values is never held for.
-    doc = minute(1840, npu=77.6, **dict(REST, sfp_phy=None))
-    doc = minute(1900, npu=77.6, **REST)
-    check('a PHY empty at one check, back at the next: quiet throughout, nothing said',
-          doc['running'] == 'quiet' and not any('standard curve until' in line for line in said), said)
-
-    # 8. Every node gone - the driver's sysctls not answering at all - is every node empty.
+    # 6. A reading that cannot be taken changes nothing.
+    #    a. The memory not read again this boot - one failed read, and os-xgs-npu's feeder marks the
+    #       module as having no sensor - while nothing holds: quiet throughout, nothing said.
+    for _ in range(5):
+        doc = minute(npu=77.6, **dict(REST, memory=None))
+        check('memory unread, nothing holding: the quiet curve, nothing said',
+              doc['running'] == 'quiet' and state_of(doc)['memory'] == 'unread' and not said, said)
+    #    b. ...and a hold the coprocessor starts later is not kept by it: quiet again when the
+    #       coprocessor is below its cool figure, the memory still unread.
+    doc = minute(npu=86.0, **dict(REST, memory=None))
+    check('the coprocessor hot, the memory unread: held for the coprocessor alone',
+          doc['running'] == 'standard' and reasons(doc) == [('npu', 'hot', 'npu_c')], doc['held_for'])
+    doc = minute(npu=77.0, **dict(REST, memory=None))
+    check('the coprocessor at 77.0, the memory still unread: the quiet curve again',
+          doc['running'] == 'quiet' and not doc['held'], doc['held_for'])
+    #    c. The port chips' nodes empty for three checks - a failed read of os-xgs-npu's every four
+    #       minutes, and its driver dropping the value at five: quiet throughout.
+    for _ in range(3):
+        doc = minute(npu=77.6, memory=52.6)
+        check('the three PHYs unread, nothing holding: the quiet curve, nothing said',
+              doc['running'] == 'quiet' and not said, said)
+    doc = minute(npu=77.6, **REST)
+    #    d. A hold the memory started ends when the memory is below its cool figure, with a PHY that
+    #       was below its own unread at that check: what it last read stands.
+    doc = minute(npu=77.6, **dict(REST, memory=82.0))
+    doc = minute(npu=77.6, **dict(REST, memory=82.5, sfp_phy=None))
+    check('held for the memory, an unread PHY that was cool: held for the memory alone, the state '
+          'not written again', reasons(doc) == [('memory', 'hot', 'memory')]
+          and fanctl.BOARD_CURVE not in written, (doc['held_for'], written))
+    doc = minute(npu=77.6, **dict(REST, memory=70.0, sfp_phy=None))
+    check('the memory at 70.0 with that PHY unread: the quiet curve again',
+          doc['running'] == 'quiet' and not doc['held'], doc['held_for'])
+    doc = minute(npu=77.6, **REST)
+    #    e. A reading that held the standard curve and stops holds it still, until it is read again
+    #       below its cool figure; nothing said in between.
+    doc = minute(npu=77.6, **dict(REST, sfp_phy=96.0))
+    doc = minute(npu=77.6, **dict(REST, sfp_phy=None))
+    check('the hot SFP+ PHY unread: still the standard curve, held for it as not read, nothing said',
+          doc['running'] == 'standard' and reasons(doc) == [('phy', 'unread', 'sfp_phy')] and not said,
+          (doc['held_for'], said))
+    doc = minute(npu=77.6, **dict(REST, sfp_phy=None))
+    check('...and a minute later still', doc['running'] == 'standard' and doc['held'])
+    doc = minute(npu=77.6, **dict(REST, sfp_phy=90.0))
+    check('read again at 90.0: held, not yet below its cool figure',
+          reasons(doc) == [('phy', 'warm', 'sfp_phy')], doc['held_for'])
+    doc = minute(npu=77.6, **REST)
+    check('read again at 63.2: the quiet curve again', doc['running'] == 'quiet', doc['running'])
+    #    f. The coprocessor's own reading, from the CPLD, the same: not read while it holds, held;
+    #       not read while nothing holds, nothing.
+    doc = minute(npu=None, **REST)
+    check('the coprocessor unread, nothing holding: the quiet curve, nothing said',
+          doc['running'] == 'quiet' and state_of(doc)['npu_c'] == 'unread' and not said, said)
+    doc = minute(npu=86.0, **REST)
+    doc = minute(npu=None, **REST)
+    check('the coprocessor unread after it was hot: still held, for it, as not read',
+          doc['running'] == 'standard' and reasons(doc) == [('npu', 'unread', 'npu_c')], doc['held_for'])
+    doc = minute(npu=77.0, **REST)
+    check('the coprocessor read again at 77.0: the quiet curve again', doc['running'] == 'quiet')
+    #    g. Every node gone - the driver's sysctls not answering at all: one that held the standard
+    #       curve holds it still, though it is not even listed; the others change nothing.
+    doc = minute(npu=77.6, **dict(REST, memory=85.0))
     MACHINE['sysctl'] = False
-    for tick in (1960, 2020):
-        doc = minute(tick, npu=77.6)
-    check('sysctl answering nothing: the readings it gave are empty, not forgotten',
-          doc['running'] == 'quiet' and set(state_of(doc).values()) == {'cool', 'empty'}, state_of(doc))
-    doc = minute(2080, npu=77.6)
-    check('sysctl answering nothing for two minutes: the standard curve',
-          doc['running'] == 'standard' and len(doc['held_for']) == 4, doc['held_for'])
+    doc = minute(npu=77.6)
+    check('sysctl answering nothing while the memory holds: still held, for the memory, not read',
+          doc['running'] == 'standard' and reasons(doc) == [('memory', 'unread', 'memory')], doc['held_for'])
     MACHINE['sysctl'] = True
-    doc = minute(2140, npu=77.6, **REST)
+    doc = minute(npu=77.6, **REST)
     check('sysctl back, everything cool: the quiet curve again', doc['running'] == 'quiet', doc['running'])
+    MACHINE['sysctl'] = False
+    for _ in range(3):
+        doc = minute(npu=77.6)
+    check('sysctl answering nothing, nothing holding: the quiet curve, nothing said',
+          doc['running'] == 'quiet' and not said and state_of(doc) == {'npu_c': 'cool'}, state_of(doc))
+    MACHINE['sysctl'] = True
+    doc = minute(npu=77.6, **REST)
 
-    # 9. A reading never given since the board started is not waited for.
-    boot()
-    first = {'switch': 47.0, 'sfp_phy': 56.0}
-    for tick in (100, 160, 220, 280):
-        doc = minute(tick, npu=70.0, **first)
-    check('a module without a sensor, no expansion module: quiet, those two never seen',
-          doc['running'] == 'quiet' and state_of(doc)['memory'] == 'not seen'
-          and state_of(doc)['module_phy'] == 'not seen', state_of(doc))
+    # 7. A reading that stops while it holds: Standard ends the hold, and quiet asked again does not
+    #    start one for it.
+    doc = minute(npu=77.6, **dict(REST, memory=85.0))
+    doc = minute(npu=77.6, **dict(REST, memory=None))
+    OPTIONS['board_curve'] = 'standard'
+    doc = minute(npu=77.6, **dict(REST, memory=None))
+    check('Standard chosen while an unread memory holds: the hold ended', not doc['held'], doc['held_for'])
+    OPTIONS['board_curve'] = 'quiet'
+    doc = minute(npu=77.6, **dict(REST, memory=None))
+    check('quiet asked again, the memory still unread: the quiet curve', doc['running'] == 'quiet'
+          and not doc['held'], doc['held_for'])
+    doc = minute(npu=77.6, **REST)
 
-    # 10. A record from another boot is no record of this one.
-    boot()
-    minute(5000, npu=70.0, **REST)
-    doc = minute(30, npu=70.0, **dict(REST, memory=None))
-    check('a record whose uptime runs past this boot\'s is dropped: the empty memory not seen',
-          state_of(doc)['memory'] == 'not seen' and doc['running'] == 'quiet', state_of(doc))
-
-    # 11. A coprocessor that does not answer while a reading is hot: the hold said once.
-    boot()
-    minute(100, npu=70.0, **REST)
+    # 8. A coprocessor that does not answer while a reading is hot: the hold said once.
+    fresh()
+    minute(npu=70.0, **REST)
     MACHINE['answers'] = False
-    first_said = minute(160, npu=70.0, **dict(REST, memory=80.0))
+    first_said = minute(npu=70.0, **dict(REST, memory=85.0))
     once = list(said)
-    again = minute(220, npu=70.0, **dict(REST, memory=80.0))
+    again = minute(npu=70.0, **dict(REST, memory=85.0))
     check('the coprocessor not answering: failed, and the hold said at the first minute only',
           first_said['status'] == 'failed' and again['status'] == 'failed'
-          and sum('standard curve until' in line for line in once) == 1
-          and not any('standard curve until' in line for line in said), (once, said))
+          and sum(holds([line]) for line in once) == 1 and not holds(said), (once, said))
     check('...and the page still shows the hold', fanctl.board_curve_status(ENTRY, OPTIONS)['held'])
     MACHINE['answers'] = True
-    minute(280, npu=70.0, **REST)
+    minute(npu=70.0, **REST)
 
-    # 12. Standard asked: nothing holds, and the coprocessor is asked only to give back what was set.
+    # 9. Standard asked: nothing holds, and the coprocessor is asked only to give back what was set.
     OPTIONS['board_curve'] = 'standard'
-    doc = minute(340, npu=90.0, **dict(REST, memory=90.0))
+    doc = minute(npu=90.0, **dict(REST, memory=90.0))
     check('standard asked, everything hot: nothing held, the line given back',
           doc['running'] == 'standard' and not doc['held'] and MACHINE['line'] == 'input', doc)
-    doc = minute(400, npu=90.0, **REST)
+    doc = minute(npu=90.0, **REST)
     check('standard asked, nothing of the plugin\'s to undo: the coprocessor is not asked',
           MACHINE['asked'] == [] and doc['status'] == 'ok', MACHINE['asked'])
     OPTIONS['board_curve'] = 'quiet'
 
-    # 13. A state written by 1.1.8, held by the coprocessor's heat, is read as a hold.
-    boot()
+    # 10. A state written by 1.1.8, held by the coprocessor's heat, is read as a hold of the
+    #     coprocessor's: kept while the CPLD is not read, as 1.1.8 kept it, and ended below 78 C.
+    fresh()
     fanctl.write_json(fanctl.BOARD_CURVE, {'set': 'standard', 'before': 'input', 'held_by_heat': True})
     check('a 1.1.8 state: the page reads it as held', fanctl.board_curve_status(ENTRY, OPTIONS)['held'])
-    doc = minute(100, npu=70.0, **REST)
+    doc = minute(npu=None, **REST)
+    check('a 1.1.8 hold with the coprocessor unread: still held, for the coprocessor',
+          doc['running'] == 'standard' and reasons(doc) == [('npu', 'unread', 'npu_c')], doc['held_for'])
+    fresh()
+    fanctl.write_json(fanctl.BOARD_CURVE, {'set': 'standard', 'before': 'input', 'held_by_heat': True})
+    doc = minute(npu=70.0, **REST)
     stored = fanctl.read_json(fanctl.BOARD_CURVE, {})
     check('a 1.1.8 state with nothing hot: quiet again, and the old key gone',
           doc['running'] == 'quiet' and 'held_by_heat' not in stored and stored.get('held') is False, stored)
 
-    # 14. A table whose figures do not read is refused, and nothing is asked.
-    ENTRY_BAD = dict(ENTRY, board_curve=dict(SPEC, phy_cool_c=90))
+    # 11. A table whose figures do not read is refused, and nothing is asked.
+    ENTRY_BAD = dict(ENTRY, board_curve=dict(SPEC, phy_cool_c=96))
     fanctl.match_model = lambda table=None, fields=None: (KEY, ENTRY_BAD)
-    doc = minute(160, npu=70.0, **REST)
+    doc = minute(npu=70.0, **REST)
     check('a cool figure above its hot one: refused, the coprocessor not asked',
           doc['status'] == 'failed' and MACHINE['asked'] == [], doc)
     fanctl.match_model = lambda table=None, fields=None: (KEY, ENTRY)
@@ -343,24 +421,28 @@ names = pagejs.page(['board_held_title', 'board_curve_names'], [
     "{name: 'dev.octep.0.temperature.memory', kind: 'memory', why: 'hot'},"
     "{name: 'dev.octep.0.temperature.sfp_phy', kind: 'phy', why: 'unread'},"
     "{name: 'dev.octep.0.temperature.switch', kind: 'phy', why: 'hot'},"
-    "{name: 'dev.octep.0.temperature.module_phy', kind: 'phy', why: 'hot'}]})",
+    "{name: 'dev.octep.0.temperature.module_phy', kind: 'phy', why: 'hot'},"
+    "{name: 'cpld.npu_c', kind: 'npu', why: 'warm'}]})",
     "board_curve_names({enabled: true, setting: 'quiet', set: 'standard', held: true, held_for: []})",
     "board_curve_names({enabled: true, setting: 'quiet', set: 'quiet', held: false, held_for: []})",
     "board_curve_names({enabled: true, setting: 'quiet', set: 'untouched', held: false})",
     "board_curve_names({enabled: true, setting: 'standard', set: 'standard', held: true})",
     "board_curve_names({enabled: false, setting: 'quiet', set: 'quiet', held: false})",
+    "board_curve_names({enabled: true, setting: 'quiet', set: 'standard', held: true, held_for: ["
+    "{name: 'dev.octep.0.temperature.memory', kind: 'memory', why: 'warm'}]})",
 ])
 if names is None:
     print('--    the page\'s words for the board curve: not run, node is not here')
 else:
-    check('page: a hold for the memory, a PHY not read and two PHYs hot is three reasons, each '
-          'naming its sensors', names[0] == [
+    check('page: a hold for the memory, a PHY not read, two PHYs hot and the coprocessor not yet below '
+          'its cool figure is four reasons, each naming its sensors', names[0] == [
               ['standard curve, held: coprocessor memory hot',
                'dev.octep.0.temperature.memory'],
               ['standard curve, held: a temperature not read',
                'dev.octep.0.temperature.sfp_phy'],
               ['standard curve, held: port PHY hot',
-               'dev.octep.0.temperature.switch, dev.octep.0.temperature.module_phy']], names[0])
+               'dev.octep.0.temperature.switch, dev.octep.0.temperature.module_phy'],
+              ['standard curve, held: not yet below its cool figure', 'cpld.npu_c']], names[0])
     check('page: a hold with no reason recorded (1.1.8) is the coprocessor\'s heat',
           names[1] == [['standard curve, held: coprocessor hot', '']], names[1])
     check('page: quiet set and nothing holding is the quiet curve', names[2] == [['quiet curve', '']],
@@ -370,6 +452,9 @@ else:
     check('page: standard asked is the standard curve, whatever a hold says',
           names[4] == [['standard curve', '']], names[4])
     check('page: the plugin off is the standard curve', names[5] == [['standard curve', '']], names[5])
+    check('page: a memory held between its figures is not called hot',
+          names[6] == [['standard curve, held: not yet below its cool figure',
+                        'dev.octep.0.temperature.memory']], names[6])
 
 
 print()

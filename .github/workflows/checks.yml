@@ -70,10 +70,10 @@ jobs:
         run: python3 tools/test-default-sensors.py
 
       # The AMDA0202 board's quiet curve gives way to its standard one while the coprocessor, its
-      # memory or a port PHY is at its hot figure, or a reading it has given stops, and comes back
-      # below every cool figure; the figures are the table's, and the help and the README say the
-      # same. Synthetic readings, a stand-in for sysctl and the coprocessor's GPIO line, and the
-      # page's words for a hold in node.
+      # memory or a port PHY is at its hot figure, and comes back once every reading that holds it is
+      # below its cool figure; a reading that cannot be taken changes nothing. The figures are the
+      # table's, and the help and the README say the same. Synthetic readings, a stand-in for sysctl
+      # and the coprocessor's GPIO line, and the page's words for a hold in node.
       - name: The board curve's return to the standard curve
         run: python3 tools/test-board-curve.py
 

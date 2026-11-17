@@ -65,8 +65,8 @@ Everything else comes from primary sources and is marked where it matters. On 20
   5 C warmer at rest (76.5 against 70-72 C). It is set again within a minute whenever the
   coprocessor restarts - measured across a reboot: three minutes after it, when the coprocessor's
   link was up - and gives way to the standard curve while the coprocessor, its memory or a port
-  PHY is too warm, or one of their readings has stopped
-  ([below](#the-board-curves-return-to-the-standard-curve)). The board's fans are read again from
+  PHY is too warm ([below](#the-board-curves-return-to-the-standard-curve)); a reading that
+  cannot be taken changes nothing. The board's fans are read again from
   the CPLD on every refresh of the page, so its cards show the speed of that second, one card a
   fan, and the bar's top is the measured 13,500. Where the coprocessor's memory module has a
   temperature sensor, os-xgs-npu's driver holds that reading too, and it is listed as a memory
@@ -139,27 +139,29 @@ necessarily clear a fan register.**
 
 On a board that drives its fans itself - the AMDA0202 board of the XGS 2100, 2300, 3100 and 3300 -
 **Board fan curve** chooses the quiet curve, and the plugin gives way to the board's standard one
-while any reading below is at or above its hot figure, until every one of them is below its cool
-figure. Until 2026-11-17 the coprocessor's die was the only one.
+while any reading below is at or above its hot figure, until every reading that holds it is below
+its cool figure. Until 2026-11-17 the coprocessor's die was the only one.
 
 | reading | hot | cool | where the figure comes from |
 |---|---|---|---|
 | coprocessor | 85 C | 78 C | its die, as the CPLD reads it. The plugin's own since 1.1.6 and not a part limit: the CN8365's is not public. |
-| memory | 75 C | 68 C | the coprocessor's DDR4 module, by its own JEDEC sensor where it has one. Ten degrees under the 85 C its DRAM is held to in the normal range - 95 C only with its refresh doubled, which is not known of the coprocessor's memory controller (SK hynix H5AN8G4/8G8/8G6NCJR datasheet Rev 1.4, p.12; Micron MTA16ATF1G64HZ datasheet Rev F, Table 12) - for the sensor's own tolerance, 1 C from 75 to 95 C and 2 C from 40 to 125 C (Renesas TSE2004GB2B0 datasheet, p.7), and for a distance between the sensor and the DRAM nobody has measured. |
-| port PHYs | 85 C | 78 C | the hottest of the switch (88E6193X), the SFP+ cages' PHY and an expansion module's PHY (both 88X5113). 20 degrees under the 88X5113's 105 C maximum junction (Marvell MV-S110852-U0 Rev C, Table 61), and 15 under the 100 C Linux sets as the alarm of the switch family's PHY sensor, a driver's default; the switch's own limit is not public. |
+| memory | 80 C | 75 C | the coprocessor's DDR4 module, by its own JEDEC sensor where it has one. Five degrees under the 85 C its DRAM is held to in the normal range - 95 C only with its refresh doubled, which is not known of the coprocessor's memory controller (SK hynix H5AN8G4/8G8/8G6NCJR datasheet Rev 1.4, p.12; Micron MTA16ATF1G64HZ datasheet Rev F, Table 12). The sensor's own tolerance is 1 C from 75 to 95 C and 2 C from 40 to 125 C (Renesas TSE2004GB2B0 datasheet, p.7), and how far it reads from the DRAM nobody has measured. |
+| port PHYs | 95 C | 88 C | the hottest of the switch (88E6193X), the SFP+ cages' PHY (88X5113) and an expansion module's PHY - an 88X5113 too on the 4x10G module AMDA0207-0001, and not known on any other module. Ten degrees under the 88X5113's 105 C maximum junction (Marvell MV-S110852-U0 Rev C, Table 61), and five under the 100 C Linux sets as the alarm of the switch family's PHY sensor, a driver's default; the switch's own limit is not public. Nor is it settled which of the switch's registers holds its temperature: the value os-xgs-npu holds for it is read from page 6, register 28, where Linux reads that family's PHY temperature at register 27 and keeps 28 for the alarm. |
 
 The figures are the hardware table's (`fans.json`, `board_curve`), and the settings help says them.
-They are deliberately low: so far they have been measured at rest only - on the second XGS 3300,
-from 2026-10-27 to 2026-11-17, the memory at 45.8 to 52.6 C, the switch at 58 to 61, the SFP+ cages'
-PHY at 60.0 to 63.2 and the module's PHY at 49.1 to 53.3 - and not yet with the ports under load.
+So far they have been measured at rest only - on the second XGS 3300, from 2026-10-27 to
+2026-11-17, the memory at 45.8 to 52.6 C, the switch at 58 to 61, the SFP+ cages' PHY at 60.0 to
+63.2 and the module's PHY at 49.1 to 53.3 - and not yet with the ports under load.
 
-**A reading that stops counts.** One this board has given since it started and no longer gives
-holds the standard curve until it is read again, as the safety contract's sixth line hands a driven
-fan back to the hardware. After two minutes: os-xgs-npu reads the port chips every four minutes and
-its driver drops a value five minutes old, so a node can be empty for the seconds between two
-values. A reading never given since the board started is one it does not have, and is not waited
-for - a memory module without a sensor, or no expansion module. The memory and the port PHYs are read
-from os-xgs-npu's driver (`dev.octep.0.temperature.memory`, `.switch`, `.sfp_phy` and `.module_phy`),
+**A reading that cannot be taken changes nothing**, as it changed nothing while the coprocessor's
+was the only one (1.1.8): it neither starts the return to the standard curve nor ends it. It is left
+out until it is read again, unless it held the standard curve at the last check: then it holds it
+still, until it is read again below its cool figure, or until Standard is chosen or Enabled turned
+off, which ends any hold. So a failed read no longer holds the standard curve: os-xgs-npu reads the
+port chips every four minutes and its driver drops a value five minutes old, so one failed read
+empties their nodes for minutes, and a memory module that answers one read with an error is not
+read again until the next boot. The memory and the port PHYs are read from
+os-xgs-npu's driver (`dev.octep.0.temperature.memory`, `.switch`, `.sfp_phy` and `.module_phy`),
 which it fills every minute and every four minutes; the coprocessor from the CPLD, as before.
 
 ## Two things worth knowing about this class of hardware
