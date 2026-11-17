@@ -1637,6 +1637,52 @@ def read_npu():
     return list(entries)
 
 
+def read_held():
+    """os-xgs-npu's held readings and nothing else: on the XGS 3300 the coprocessor's memory and its
+    port chips beside the copies of the CPLD's two, on the XGS 136 the coprocessor's SoC.
+
+    For a caller that wants only these, every minute: fanctl.py's board curve, whose return to the
+    standard curve counts the memory and the port PHYs. discover() finds them by walking the whole
+    tree with `sysctl -aF` (67-195 ms, V); this lists the two drivers' own nodes with `sysctl -N`,
+    which prints names and runs no handler (history.py's discover_leaves()), and reads the ones
+    _HELD names in one more call - each answered from the driver's memory (os-xgs-npu,
+    contrib/octep/octep.c, octep_sysctl_temp()).
+
+    Every node the driver has is an entry, in the shape read() gives a sensor, and an empty one is
+    an entry with celsius None and unreadable 'absent': the driver refuses a value five minutes old
+    with ENOENT, so a feeder that stopped, a memory module with no sensor and a board with no
+    expansion module all look like that from here, and telling them apart is the caller's. Writes
+    nothing; never raises; a machine without either driver gets [].
+    """
+    names = []
+    for line in _run(['/sbin/sysctl', '-N', 'dev.octep', 'dev.npuep']).splitlines():
+        name = line.strip()
+        if _HELD.match(name) and name not in names:
+            names.append(name)
+    tree = _sysctl_values(names)
+    entries = []
+    for name in names:
+        celsius, units = parse_units(tree.get(name))
+        group, kind = _classify(name)
+        entry = {
+            'key': 'sysctl:%s' % name,
+            'name': name,
+            'source': 'sysctl',
+            'group': group,
+            'kind': kind,
+            'label': _label(name, kind),
+            'attached': _ATTACHED.get(kind, 'unknown'),
+            'named_by_driver': True,
+            'celsius': celsius,
+            'raw': tree.get(name),
+            'units': units if celsius is not None else None,
+        }
+        if celsius is None:
+            entry['unreadable'] = units
+        entries.append(entry)
+    return entries
+
+
 def read(catalogue=None, include_drives=False, include_superio=False,
          tracker=None):
     """Every temperature this machine reports, grouped, named and rated.

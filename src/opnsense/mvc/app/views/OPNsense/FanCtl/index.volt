@@ -992,13 +992,45 @@
             return (probe_doc && is_object(probe_doc.board_curve)) ? probe_doc.board_curve : {};
         }
 
-        function board_curve_name(board) {
-            if (!board.enabled || board.set !== 'quiet') {
-                return "{{ lang._('the standard curve') }}";
+        /* Why the standard curve holds where the quiet one was asked for, one sentence a kind of
+           reason (fanctl.py board_curve(), held_for). */
+        const board_held_title = {
+            npu: "{{ lang._('the standard curve, held while the coprocessor is hot') }}",
+            memory: "{{ lang._('the standard curve, held while the coprocessor memory is hot') }}",
+            phy: "{{ lang._('the standard curve, held while a port PHY is hot') }}",
+            unread: "{{ lang._('the standard curve, held while a temperature it follows is not read') }}"
+        };
+
+        /* Which curve runs, as [words, the sensors behind them] - one pair, or one a reason where the
+           quiet curve was asked for and the standard one holds. It was asked for whenever the plugin
+           is on and the setting says quiet: the reconcile writes 'standard' as the curve it set once
+           it has given the line back, so a hold read as the standard curve with no reason given
+           while the setting was not looked at. A hold kept from before its reasons were - a state
+           written by 1.1.8, which knew only the coprocessor's heat - is that reason. */
+        function board_curve_names(board) {
+            if (!board.enabled || board.setting !== 'quiet' || !board.held) {
+                return [[board.enabled && board.setting === 'quiet' && board.set === 'quiet'
+                    ? "{{ lang._('the quiet curve') }}" : "{{ lang._('the standard curve') }}", '']];
             }
-            return board.held_by_heat
-                ? "{{ lang._('the standard curve, held while the coprocessor is hot') }}"
-                : "{{ lang._('the quiet curve') }}";
+            const order = [];
+            const names = {};
+            ($.isArray(board.held_for) ? board.held_for : []).forEach(function (item) {
+                const key = item.why === 'unread' ? 'unread' : String(item.kind);
+                if (board_held_title[key] === undefined) {
+                    return;
+                }
+                if (names[key] === undefined) {
+                    names[key] = [];
+                    order.push(key);
+                }
+                names[key].push(String(item.name || ''));
+            });
+            if (order.length === 0) {
+                return [[board_held_title.npu, '']];
+            }
+            return order.map(function (key) {
+                return [board_held_title[key], names[key].join(', ')];
+            });
         }
 
         /* The Settings tab on such a board: Board fan curve shown only where it does something,
@@ -1055,7 +1087,9 @@
                     : label("{{ lang._('the table does not permit control on this model') }}",
                         'label-default')));
             if (board.available) {
-                $control.append(' ').append(chip(board_curve_name(board), 'text-muted', ''));
+                board_curve_names(board).forEach(function (pair) {
+                    $control.append(' ').append(chip(pair[0], 'text-muted', pair[1]));
+                });
             }
             if (table.reason) {
                 $control.append(help_note(String(table.reason)));
