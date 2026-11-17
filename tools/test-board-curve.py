@@ -355,21 +355,21 @@ if names is None:
 else:
     check('page: a hold for the memory, a PHY not read and two PHYs hot is three reasons, each '
           'naming its sensors', names[0] == [
-              ['the standard curve, held while the coprocessor memory is hot',
+              ['standard curve, held: coprocessor memory hot',
                'dev.octep.0.temperature.memory'],
-              ['the standard curve, held while a temperature it follows is not read',
+              ['standard curve, held: a temperature not read',
                'dev.octep.0.temperature.sfp_phy'],
-              ['the standard curve, held while a port PHY is hot',
+              ['standard curve, held: port PHY hot',
                'dev.octep.0.temperature.switch, dev.octep.0.temperature.module_phy']], names[0])
     check('page: a hold with no reason recorded (1.1.8) is the coprocessor\'s heat',
-          names[1] == [['the standard curve, held while the coprocessor is hot', '']], names[1])
-    check('page: quiet set and nothing holding is the quiet curve', names[2] == [['the quiet curve', '']],
+          names[1] == [['standard curve, held: coprocessor hot', '']], names[1])
+    check('page: quiet set and nothing holding is the quiet curve', names[2] == [['quiet curve', '']],
           names[2])
     check('page: quiet asked and not yet set is the standard curve',
-          names[3] == [['the standard curve', '']], names[3])
+          names[3] == [['standard curve', '']], names[3])
     check('page: standard asked is the standard curve, whatever a hold says',
-          names[4] == [['the standard curve', '']], names[4])
-    check('page: the plugin off is the standard curve', names[5] == [['the standard curve', '']], names[5])
+          names[4] == [['standard curve', '']], names[4])
+    check('page: the plugin off is the standard curve', names[5] == [['standard curve', '']], names[5])
 
 
 print()

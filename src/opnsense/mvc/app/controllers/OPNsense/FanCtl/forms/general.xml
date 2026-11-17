@@ -23,7 +23,7 @@
         <id>fanctl.general.board_curve</id>
         <label>Board fan curve</label>
         <type>dropdown</type>
-        <help>Only on a board that drives its fans itself and has two curves to choose from - today the AMDA0202 board of the XGS 2100, 2300, 3100 and 3300 - and only while Enabled is on; anywhere else it does nothing. On that board the fans follow the CPU's temperature with no duty anybody can write: measured on an XGS 3300, about 7,200 rpm at rest and 13,500 under full load. Quiet selects the lower curve the vendor uses on the 2100 and 2300, through the coprocessor's GPIO 48: about 5,400 rpm at rest, and still rising with heat. It is set again within a minute whenever the coprocessor restarts. The standard curve comes back while the coprocessor reads 85 C or more, its memory 75 C or more or a port PHY 85 C or more, until each is below 78, 68 and 78 C; and while one of those readings, given since the board started, has not been read for two minutes, until it is read again. Standard leaves the board's own choice alone.</help>
+        <help>Only on a board that drives its fans itself and has two curves to choose from - today the AMDA0202 board of the XGS 2100, 2300, 3100 and 3300 - and only while Enabled is on; anywhere else it does nothing. On that board the fans follow the CPU's temperature with no duty anybody can write: measured on an XGS 3300, about 7,200 rpm at rest and 13,500 under full load. Quiet selects the lower curve the vendor uses on the 2100 and 2300, through the coprocessor's GPIO 48: about 5,400 rpm at rest, and still rising with heat. It is set again within a minute whenever the coprocessor restarts. The standard curve comes back while the coprocessor reads 85 C or more, its memory 75 C or more or a port PHY 85 C or more, until each is below 78, 68 and 78 C; and while one of those readings, once given since boot, goes unread for two minutes, until it is read again. Standard leaves the board's own choice alone.</help>
     </field>
     <field>
         <id>fanctl.general.channels</id>
@@ -42,7 +42,7 @@
         <label>Temperatures to follow</label>
         <type>select_multiple</type>
         <style>tokenize</style>
-        <help>The hottest reading among the groups chosen is what the curve is fed - never an average of them, because one core at 85 C and three at 40 C averages to a number a curve is happy with while the machine still has a core at 85 C. A group chosen here that this machine does not report is not ignored: the fans go back to the hardware, because a decision made from a sensor that is not answering is a guess. Memory modules, and the port PHYs and network controllers, are offered only where this machine reports them, and the curve follows them only when they are chosen here.</help>
+        <help>The hottest reading among the groups chosen is what the curve is fed - never an average of them, because one core at 85 C and three at 40 C averages to a number a curve is happy with while the machine still has a core at 85 C. A group chosen here that this machine does not report is not ignored: the fans go back to the hardware, because a decision made from a sensor that is not answering is a guess. Memory modules, port PHYs and network controllers are offered only where this machine reports them, and followed only when chosen here.</help>
     </field>
     <field>
         <id>fanctl.general.interval</id>

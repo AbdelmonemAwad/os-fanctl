@@ -101,7 +101,7 @@
             <range_day>last day %s</range_day>
             <range_hour>last hour %s</range_hour>
             <range_legend>lowest / mean / highest</range_legend>
-            <range_watched>%s of the window was watched</range_watched>
+            <range_watched>%s of this window was watched</range_watched>
             <nodata>No fan or temperature readings yet.</nodata>
             <stale>The readings are from %s and are no longer being updated.</stale>
             <unreachable>Could not read the fan control status.</unreachable>

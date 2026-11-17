@@ -177,7 +177,7 @@ check('widget: the figures are fenced off from the sentence around them',
 check('widget: the hottest PHY\'s line carries its own record, the SFP+ cages\' 60.0 / 61.9 / 63.2',
       'last day 60.0 / 61.9 / 63.2 °C' in plain(row(out['after'], phy)), plain(row(out['after'], phy))[-200:])
 check('widget: a window watched for a quarter says so in the tooltip',
-      'lowest / mean / highest - 25% of the window was watched' in plain(row(out['after'], phy)))
+      'lowest / mean / highest - 25% of this window was watched' in plain(row(out['after'], phy)))
 check('widget: a whole window says only which three figures they are',
       'title="lowest / mean / highest"' in plain(row(out['after'], memory)), plain(row(out['after'], memory))[-260:])
 check('widget: the coprocessor\'s line has no range, though the record has its day',

@@ -1040,10 +1040,10 @@
         /* Why the standard curve holds where the quiet one was asked for, one sentence a kind of
            reason (fanctl.py board_curve(), held_for). */
         const board_held_title = {
-            npu: "{{ lang._('the standard curve, held while the coprocessor is hot') }}",
-            memory: "{{ lang._('the standard curve, held while the coprocessor memory is hot') }}",
-            phy: "{{ lang._('the standard curve, held while a port PHY is hot') }}",
-            unread: "{{ lang._('the standard curve, held while a temperature it follows is not read') }}"
+            npu: "{{ lang._('standard curve, held: coprocessor hot') }}",
+            memory: "{{ lang._('standard curve, held: coprocessor memory hot') }}",
+            phy: "{{ lang._('standard curve, held: port PHY hot') }}",
+            unread: "{{ lang._('standard curve, held: a temperature not read') }}"
         };
 
         /* Which curve runs, as [words, the sensors behind them] - one pair, or one a reason where the
@@ -1055,7 +1055,7 @@
         function board_curve_names(board) {
             if (!board.enabled || board.setting !== 'quiet' || !board.held) {
                 return [[board.enabled && board.setting === 'quiet' && board.set === 'quiet'
-                    ? "{{ lang._('the quiet curve') }}" : "{{ lang._('the standard curve') }}", '']];
+                    ? "{{ lang._('quiet curve') }}" : "{{ lang._('standard curve') }}", '']];
             }
             const order = [];
             const names = {};
