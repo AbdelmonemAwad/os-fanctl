@@ -8,10 +8,11 @@ The coprocessor's die was the only reading the rule followed. It follows the cop
 and every port PHY os-xgs-npu's driver holds as well, each against the table's figures, and a
 reading that cannot be taken changes nothing, as it changed nothing while the coprocessor's was the
 only one: it starts no hold, and one that held the standard curve at the last check holds it until
-it is read again. Checked here: the figures, in the table, the settings help and the README alike;
-the rule, minute by minute, with the driver's nodes read through a stand-in for sysctl(8) and the
-coprocessor's GPIO line through a stand-in for npu-run.sh; and the page's words for a hold, run in
-node (tools/pagejs.py).
+it is read again. On an XGS 2100 or 2300, whose coprocessor drives the line low itself, none of it
+raises the line, and the document and the page say the quiet curve runs. Checked here: the figures,
+in the table, the settings help and the README alike; the rule, minute by minute, with the driver's
+nodes read through a stand-in for sysctl(8) and the coprocessor's GPIO line through a stand-in for
+npu-run.sh; and the page's words for a hold, run in node (tools/pagejs.py).
 
 Synthetic readings only. Nothing here reads a sysctl, runs kenv or npu-run.sh, opens a port, or
 writes anywhere but a directory of its own that it removes.
@@ -99,6 +100,9 @@ check('the README states the table\'s figures',
       rows == {'coprocessor': limits['npu'], 'memory': limits['memory'], 'port PHYs': limits['phy']}, rows)
 check('the README says a reading that cannot be taken changes nothing',
       '**A reading that cannot be taken changes nothing**' in readme)
+check('the settings help and the README say none of it acts on the XGS 2100 and 2300',
+      bool(helps) and 'neither Standard nor a hot reading changes it there' in helps[0]
+      and '**On the XGS 2100 and 2300 none of this acts.**' in readme)
 
 
 # -- The machine, stood in for -----------------------------------------------------------------------
@@ -232,9 +236,9 @@ try:
           reasons(doc) == [('memory', 'hot', 'memory')]
           and len(said) == 2 and 'coprocessor memory reads 80.0 C, at or above 80 C' in said[0], said)
     status = fanctl.board_curve_status(ENTRY, OPTIONS)
-    check('the page\'s document: held, for dev.octep.0.temperature.memory, hot',
+    check('the page\'s document: held, for dev.octep.0.temperature.memory, hot, the line given back',
           status['held'] and [(item['name'], item['why']) for item in status['held_for']]
-          == [('dev.octep.0.temperature.memory', 'hot')], status)
+          == [('dev.octep.0.temperature.memory', 'hot')] and status['gpio'] == 'input', status)
     doc = minute(npu=77.6, **dict(REST, memory=81.0))
     check('memory still hot a minute later: the state not written again, nothing said',
           doc['held'] and fanctl.BOARD_CURVE not in written and not said, (written, said))
@@ -403,7 +407,39 @@ try:
     check('a 1.1.8 state with nothing hot: quiet again, and the old key gone',
           doc['running'] == 'quiet' and 'held_by_heat' not in stored and stored.get('held') is False, stored)
 
-    # 11. A table whose figures do not read is refused, and nothing is asked.
+    # 11. An XGS 2100 or 2300, whose coprocessor drives the line low itself: the plugin leaves it low
+    #     whatever holds or is asked, and the document and the page say the curve the line gives.
+    fresh(line='output')
+    doc = minute(npu=70.0, **REST)
+    check('2100/2300, quiet asked: the line low as the board left it, nothing driven',
+          doc['running'] == 'quiet' and doc['gpio'] == 'output'
+          and not any(c.startswith('gpioset') for c in MACHINE['asked']), MACHINE['asked'])
+    doc = minute(npu=70.0, **dict(REST, memory=85.0))
+    check('2100/2300, the memory hot: held, and the line left low, not given back',
+          doc['held'] and MACHINE['line'] == 'output'
+          and not any(c.startswith('gpioget') for c in MACHINE['asked']), MACHINE['asked'])
+    check('2100/2300, the memory hot: the document says the quiet curve runs, the log that the line '
+          'was left low', doc['running'] == 'quiet' and doc['gpio'] == 'output'
+          and sum('left low' in line for line in said) == 1, (doc['running'], said))
+    check('2100/2300: the page\'s document carries the line, low',
+          fanctl.board_curve_status(ENTRY, OPTIONS)['gpio'] == 'output')
+    doc = minute(npu=70.0, **dict(REST, memory=85.0))
+    check('2100/2300, still hot a minute later: the coprocessor not asked, the quiet curve said to run',
+          MACHINE['asked'] == [] and doc['running'] == 'quiet' and not said, (MACHINE['asked'], said))
+    doc = minute(npu=70.0, **REST)
+    check('2100/2300, the memory cool again: quiet, the line never raised',
+          doc['running'] == 'quiet' and not doc['held'] and MACHINE['line'] == 'output', doc['held_for'])
+    OPTIONS['board_curve'] = 'standard'
+    doc = minute(npu=70.0, **REST)
+    check('2100/2300, Standard chosen: the line left low, the quiet curve said to run',
+          doc['running'] == 'quiet' and MACHINE['line'] == 'output', doc)
+    doc = minute(npu=70.0, **REST)
+    check('2100/2300, Standard a minute later: the coprocessor not asked, the quiet curve said to run',
+          MACHINE['asked'] == [] and doc['running'] == 'quiet', doc)
+    OPTIONS['board_curve'] = 'quiet'
+    fresh()
+
+    # 12. A table whose figures do not read is refused, and nothing is asked.
     ENTRY_BAD = dict(ENTRY, board_curve=dict(SPEC, phy_cool_c=96))
     fanctl.match_model = lambda table=None, fields=None: (KEY, ENTRY_BAD)
     doc = minute(npu=70.0, **REST)
@@ -430,6 +466,11 @@ names = pagejs.page(['board_held_title', 'board_curve_names'], [
     "board_curve_names({enabled: false, setting: 'quiet', set: 'quiet', held: false})",
     "board_curve_names({enabled: true, setting: 'quiet', set: 'standard', held: true, held_for: ["
     "{name: 'dev.octep.0.temperature.memory', kind: 'memory', why: 'warm'}]})",
+    "board_curve_names({enabled: true, setting: 'quiet', set: 'standard', held: true, gpio: 'output', "
+    "held_for: [{name: 'dev.octep.0.temperature.memory', kind: 'memory', why: 'hot'}]})",
+    "board_curve_names({enabled: true, setting: 'standard', set: 'standard', held: false, gpio: 'output'})",
+    "board_curve_names({enabled: true, setting: 'quiet', set: 'standard', held: true, gpio: 'input', "
+    "held_for: [{name: 'dev.octep.0.temperature.memory', kind: 'memory', why: 'hot'}]})",
 ])
 if names is None:
     print('--    the page\'s words for the board curve: not run, node is not here')
@@ -455,6 +496,13 @@ else:
     check('page: a memory held between its figures is not called hot',
           names[6] == [['standard curve, held: not yet below its cool figure',
                         'dev.octep.0.temperature.memory']], names[6])
+    check('page: a hold where the line stayed low (an XGS 2100 or 2300) is the quiet curve',
+          names[7] == [['quiet curve', '']], names[7])
+    check('page: Standard where the line stayed low is the quiet curve', names[8] == [['quiet curve', '']],
+          names[8])
+    check('page: a hold where the line was given back names its reasons',
+          names[9] == [['standard curve, held: coprocessor memory hot', 'dev.octep.0.temperature.memory']],
+          names[9])
 
 
 print()

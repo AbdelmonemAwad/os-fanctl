@@ -892,9 +892,11 @@ def cpld_tach():
 # Reconciled, not set once: the coprocessor lets go of the line whenever it restarts - with the host,
 # or taken up again in place - so cron asks every minute, and Apply at once. Only what this plugin set
 # is undone: the line's state before the first change is kept, so a 2100 or 2300, whose coprocessor
-# drives it low itself, stays low when the setting goes back to standard. And the quiet curve gives
-# way to the standard one while it is too warm, below: the lower curve is the vendor's choice for the
-# 2xxx series, and on a 3xxx it has been watched for minutes, not under a long load.
+# drives it low itself, stays low when the setting goes back to standard - and while a reading below
+# holds the standard curve, which therefore does not act there: the document and the page say the
+# curve the line gives (gpio), the quiet one. And the quiet curve gives way to the standard one while
+# it is too warm, below: the lower curve is the vendor's choice for the 2xxx series, and on a 3xxx it
+# has been watched for minutes, not under a long load.
 #
 # THE RETURN TO THE STANDARD CURVE (2026-11-17). The quiet curve gives way while any reading below
 # is at or above its hot figure, and comes back once every reading that holds it is read below its
@@ -1094,8 +1096,12 @@ def board_curve():
         state.update({'held': held, 'held_for': held_for})
         write_json(BOARD_CURVE, state)
 
-    # Standard, and nothing of this plugin's to undo: the coprocessor is not even asked.
+    # Standard, and nothing of this plugin's to undo: the coprocessor is not even asked. A line it
+    # left low when it went back to standard - a board whose coprocessor drives it low itself, a 2100
+    # or 2300 - is low still, and the quiet curve is the one that runs.
     if want == 'standard' and state.get('set') != 'quiet':
+        if state.get('gpio') == 'output':
+            document['running'] = 'quiet'
         return document
 
     now = _board_line(line)
@@ -1122,10 +1128,16 @@ def board_curve():
                 document.update({'status': 'failed', 'detail': 'GPIO %d was not given back' % line})
                 return document
             log("board curve: standard - the coprocessor's GPIO %d given back to the board" % line)
+        elif now == 'output' and state.get('set') == 'quiet':
+            log("board curve: standard - the coprocessor's GPIO %d left low, as it was before this plugin "
+                "drove it, so this board's quiet curve runs" % line)
         state['set'] = 'standard'
     state['at'] = int(time.time())
+    state['gpio'] = now
     write_json(BOARD_CURVE, state)
-    document['gpio'] = now
+    # The curve the line gives, which is the one asked for except on a board whose coprocessor drives
+    # the line low itself: there neither Standard nor a hold raises it.
+    document.update({'gpio': now, 'running': 'quiet' if now == 'output' else 'standard'})
     return document
 
 
@@ -1162,10 +1174,14 @@ def board_curve_status(entry=None, options=None):
     options = options if options is not None else settings()
     state = read_json(BOARD_CURVE, {}) or {}
     held_for = state.get('held_for')
+    # The line as the last reconcile that asked the coprocessor left it, 'output' (driven low, the
+    # quiet curve) or 'input'; None where none has asked since 2026-11-17.
+    gpio = state.get('gpio')
     return {'available': True, 'setting': options['board_curve'], 'enabled': options['enabled'],
             'set': state.get('set') or 'untouched',
             'held': bool(state.get('held', state.get('held_by_heat'))),
             'held_for': held_for if isinstance(held_for, list) else [],
+            'gpio': gpio if gpio in ('output', 'input') else None,
             'at': state.get('at')}
 
 

@@ -71,11 +71,14 @@ Everything else comes from primary sources and is marked where it matters. On 20
   fan, and the bar's top is the measured 13,500. Where the coprocessor's memory module has a
   temperature sensor, os-xgs-npu's driver holds that reading too, and it is listed as a memory
   module; so are its port chips - the switch, the SFP+ cages' PHY and an expansion module's
-  PHY - listed as port PHYs. Since 2026-11-17 the page gives the memory a card and the hottest of
+  PHY - listed as port PHYs. The page gives the memory a card, and since 2026-11-17 the hottest of
   the port PHYs one, each with the record's lowest, mean and highest over the window chosen, and
   the dashboard panel gives their two lines the last day's; memory modules and port PHYs are
-  offered as temperatures to follow wherever a machine reports them, and never followed unless
-  chosen.
+  offered as temperatures to follow wherever a machine reports them, and followed by the fan curve
+  only when chosen - the board curve's return to the standard curve counts them on this board
+  whatever is chosen. The record's figures for them are kept while Enabled is on, by the plugin's
+  own sampler; with Enabled off the minute's record keeps the processor's and the board's sensors
+  only, and these cards show the reading without its figures.
 - **Keeps a record**, once a minute, of every sensor and every fan: the lowest, the highest and
   the time-weighted mean over the last hour, day, week and month, and how long each sensor spent
   above each rung of a fixed ladder. One sample costs 1.4 ms and the whole record is bounded at
@@ -163,6 +166,15 @@ empties their nodes for minutes, and a memory module that answers one read with 
 read again until the next boot. The memory and the port PHYs are read from
 os-xgs-npu's driver (`dev.octep.0.temperature.memory`, `.switch`, `.sfp_phy` and `.module_phy`),
 which it fills every minute and every four minutes; the coprocessor from the CPLD, as before.
+
+**On the XGS 2100 and 2300 none of this acts.** Their coprocessor drives GPIO 48 low itself - the
+vendor's startup script in its GPL sources does, on assemblies AMDA0202-0001 and -0002 - so the
+lower curve is their board's own, and the plugin, which undoes only what it set, leaves the line low:
+neither Standard nor a hot reading brings the standard curve back there. Once the plugin has read
+the line - with Quiet chosen, or after it - the Hardware tab and `fanctl.py board-curve` say the
+curve it gives, the quiet one, where until 2026-11-17 they said the standard curve; with Standard
+chosen from the start the line is never read, and the tab names the setting. Neither model is in
+this project's lab, so this is read from those sources and the plugin's own code, not measured.
 
 ## Two things worth knowing about this class of hardware
 

@@ -1053,8 +1053,14 @@
            is on and the setting says quiet: the reconcile writes 'standard' as the curve it set once
            it has given the line back, so a hold read as the standard curve with no reason given
            while the setting was not looked at. A hold kept from before its reasons were - a state
-           written by 1.1.8, which knew only the coprocessor's heat - is that reason. */
+           written by 1.1.8, which knew only the coprocessor's heat - is that reason. And the line
+           as the reconcile last read it, where it has, comes first: driven low is the quiet curve,
+           whatever was asked or held - an XGS 2100's or 2300's coprocessor drives it low itself,
+           and neither Standard nor a hold raises it there. */
         function board_curve_names(board) {
+            if (board.gpio === 'output') {
+                return [["{{ lang._('quiet curve') }}", '']];
+            }
             if (!board.enabled || board.setting !== 'quiet' || !board.held) {
                 return [[board.enabled && board.setting === 'quiet' && board.set === 'quiet'
                     ? "{{ lang._('quiet curve') }}" : "{{ lang._('standard curve') }}", '']];
