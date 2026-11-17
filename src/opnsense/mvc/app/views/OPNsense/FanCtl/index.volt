@@ -2388,9 +2388,37 @@
             'pch': "{{ lang._('chipset') }}",
             'acpi': "{{ lang._('ACPI thermal zones') }}",
             'nvme': "{{ lang._('drives') }}",
+            'nic': "{{ lang._('port PHYs and network controllers') }}",
+            'dimm': "{{ lang._('memory modules') }}",
             'npu': "{{ lang._('network coprocessor') }}",
             'inlet': "{{ lang._('inlet air') }}"
         };
+
+        /* The two groups that are offered only where this machine reports them, as
+           sensors.py suggested_groups() suggests them: a memory module's sensor, and a network
+           chip's - a port's PHY among them. Every other group is offered everywhere, and a group
+           this machine does not report is worth being able to choose and then being told about.
+           These two are not, because they are never a curve's only input: slow, like the
+           chipset, and offered beside the processor. On a machine with neither, a choice of one
+           could only ever fail the sensors line. One already saved is shown whatever the machine
+           reports, with the same note any other group gets. */
+        const FOUND_ONLY = ['nic', 'dimm'];
+
+        /* The words one group is offered with, or null where it is not offered: its title, and
+           the note where this machine does not report it. `present` is the document's list of
+           groups read now, or null before any document has said. */
+        function sensor_offer(key, present, saved) {
+            if (sensor_title[key] === undefined) {
+                return null;
+            }
+            if (present === null || present.indexOf(key) !== -1) {
+                return sensor_title[key];
+            }
+            if (!saved && FOUND_ONLY.indexOf(key) !== -1) {
+                return null;
+            }
+            return sensor_title[key] + ' ' + "{{ lang._('(not on this machine)') }}";
+        }
 
         /* The form is loaded only after the probe has answered, and that ordering is the whole
            reason this is a function rather than a block at the end of ready().
@@ -2456,28 +2484,34 @@
             });
         }
 
-        /* All four groups, always, whether or not this machine has them. A group this machine
-           does not report is worth being able to choose and then being told about: choosing it
-           fails the sensors line of the contract, with the group named, which is a better answer
-           than a list that quietly omitted it. */
+        /* Every group in sensor_title, whether or not this machine has it, except the two in
+           FOUND_ONLY, which are offered where it does. A group this machine does not report is
+           worth being able to choose and then being told about: choosing it fails the sensors
+           line of the contract, with the group named, which is a better answer than a list that
+           quietly omitted it. Which groups it reports comes from the live document, and from the
+           probe's where that has not arrived - the form is loaded in the probe's callback, so
+           one of the two is there - and with neither, no group is called absent. */
         function offer_sensors() {
             const $select = $('#fanctl\\.general\\.sensors');
             if ($select.length === 0) {
                 return;
             }
-            const present = (state_doc && is_object(state_doc.temperatures)
-                && $.isArray(state_doc.temperatures.present))
-                ? state_doc.temperatures.present : [];
+            const present_in = function (doc) {
+                return (doc && is_object(doc.temperatures) && $.isArray(doc.temperatures.present))
+                    ? doc.temperatures.present : null;
+            };
+            const present = present_in(state_doc) || present_in(probe_doc);
             $select.find('option').each(function () {
-                const key = $(this).val();
-                if (sensor_title[key] !== undefined) {
-                    $(this).text(sensor_title[key]);
+                const text = sensor_offer($(this).val(), present, true);
+                if (text !== null) {
+                    $(this).text(text);
                 }
             });
             Object.keys(sensor_title).forEach(function (key) {
-                add_option($select, key, sensor_title[key] + (
-                    present.indexOf(key) === -1
-                        ? ' ' + "{{ lang._('(not on this machine)') }}" : ''));
+                const text = sensor_offer(key, present, false);
+                if (text !== null) {
+                    add_option($select, key, text);
+                }
             });
         }
 

@@ -108,6 +108,13 @@
                 (sensors.py read_npu(), read_cpld()); they were missing from the mask until
                 os-fanctl #57's default made them groups a machine follows, and an owner could
                 not choose them by name.
+
+                dimm and nic - a memory module's own sensor, and a network chip's, a port's PHY
+                among them - have always passed the mask, and until 2026-11-17 the page did not
+                offer them. It offers them now where the machine reports them, as sensors.py
+                suggested_groups() suggests them, and nowhere else. Neither is a default: not
+                here, not in MODEL_SENSORS and not in the table, so a machine without them is
+                never asked for them.
             -->
             <sensors type="CSVListField">
                 <Required>Y</Required>
