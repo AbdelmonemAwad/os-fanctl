@@ -255,14 +255,14 @@ R3300_FULL = reading(
     held('sfp_phy', 'nic', 63.2),
     held('module_phy', 'nic', 49.1),
 )
-# The first XGS 3300: a memory module without a sensor - its empty node is left out of the reading
-# (sensors.py _HELD) - and no expansion module.
+# An XGS 3300 like the first: a memory module without a sensor - its empty node is left out of the
+# reading (sensors.py _HELD) - and no expansion module. Round figures, not that box's.
 R3300_FIRST = reading(
-    sensor('cpld.cpu_c', 'cpu', 56.2, 'cpld'),
-    sensor('cpld.npu_c', 'npu', 69.3, 'cpld'),
-    sensor('cpld.inlet_c', 'inlet', 27.0, 'cpld'),
-    held('switch', 'nic', 46.6),
-    held('sfp_phy', 'nic', 56.2),
+    sensor('cpld.cpu_c', 'cpu', 55.0, 'cpld'),
+    sensor('cpld.npu_c', 'npu', 70.0, 'cpld'),
+    sensor('cpld.inlet_c', 'inlet', 28.0, 'cpld'),
+    held('switch', 'nic', 47.0),
+    held('sfp_phy', 'nic', 56.0),
 )
 # The XGS 136 with the PHYs read_npu() reads over the coprocessor's link.
 phy1 = sensor('npu.phy:1', 'nic', 55.0, 'npu')

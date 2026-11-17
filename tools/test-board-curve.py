@@ -277,9 +277,9 @@ try:
 
     # 9. A reading never given since the board started is not waited for.
     boot()
-    first = {'switch': 46.6, 'sfp_phy': 56.2}
+    first = {'switch': 47.0, 'sfp_phy': 56.0}
     for tick in (100, 160, 220, 280):
-        doc = minute(tick, npu=69.3, **first)
+        doc = minute(tick, npu=70.0, **first)
     check('a module without a sensor, no expansion module: quiet, those two never seen',
           doc['running'] == 'quiet' and state_of(doc)['memory'] == 'not seen'
           and state_of(doc)['module_phy'] == 'not seen', state_of(doc))
