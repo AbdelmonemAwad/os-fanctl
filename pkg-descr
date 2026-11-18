@@ -49,8 +49,17 @@ Plugin Changelog
 
 1.1.9
 
-* Phase 1: memory and port PHY temperatures, and the board curve's return
-  with them
+* two sensor groups, offered where a machine reports them: the memory
+  modules, and the port PHYs and network controllers - on the XGS 3300
+  the coprocessor's memory and its port PHYs, on the XGS 136 its
+  switch's PHYs
+* cards for the memory and for the hottest port PHY - now, the last
+  hour, the last day - on the page and on the dashboard widget
+* Board fan curve, Quiet, on the AMDA0202 board (XGS 2100, 2300, 3100
+  and 3300): the standard curve comes back while the coprocessor reads
+  85 C or more, its memory 80 C or more or a port PHY 95 C or more,
+  until each is below 78, 75 and 88 C; a reading that cannot be taken
+  changes nothing, and the page says which reading holds it
 
 1.1.8
 
