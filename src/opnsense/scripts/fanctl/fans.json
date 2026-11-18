@@ -242,6 +242,17 @@
         "line": 48,
         "npu_hot_c": 85,
         "npu_cool_c": 78,
+        "memory_hot_c": 80,
+        "memory_cool_c": 75,
+        "phy_hot_c": 95,
+        "phy_cool_c": 88,
+        "figures": [
+          "Where the quiet curve gives way to the standard one, and where it comes back: at or above each hot figure, and once every reading that holds it is read below its cool figure. A reading that cannot be taken changes nothing: it neither starts that nor ends it (fanctl.py, board_curve()).",
+          "npu, 85 and 78 C: the coprocessor's die as the CPLD reads it. The plugin's own since 1.1.6 and not a part limit: the CN8365's is not public.",
+          "memory, 80 and 75 C: the coprocessor's DDR4 module, read by its own JEDEC thermal sensor, where the module has one. DDR4 DRAM is held to a case temperature of 0 to 85 C in its normal range, and to 95 C only with its refresh doubled (SK hynix H5AN8G4/8G8/8G6NCJR datasheet Rev 1.4, p.12; Micron MTA16ATF1G64HZ datasheet Rev F, Table 12). Whether the coprocessor's memory controller doubles it is not known, so 85 C holds, and the hot figure is five degrees under it. The sensor's own tolerance is 1 C from 75 to 95 C and 2 C from 40 to 125 C (Renesas TSE2004GB2B0 datasheet, p.7), and how far the sensor on the module reads from the DRAM's case is not known.",
+          "phy, 95 and 88 C: every port PHY os-xgs-npu reads, so the hottest of them - the switch (88E6193X), the SFP+ cages' PHY (88X5113) and an expansion module's PHY, an 88X5113 too on the 4x10G module AMDA0207-0001 and not known on any other. The 88X5113's maximum junction is 105 C (Marvell MV-S110852-U0 Rev C, Table 61), and the grade of the fitted part is not established. The switch's limit is not public; Linux sets the alarm of that family's PHY sensor at 100 C, a driver's default and not a part limit. So ten degrees under the one published limit, five under that default. Which of the switch's registers holds its temperature is not settled either: the value os-xgs-npu holds for it is read from page 6, register 28, where Linux reads that family's PHY temperature at register 27 and keeps 28 for the alarm.",
+          "Measured at rest only, so far, on the second XGS 3300 from 2026-10-27 to 2026-11-17: the memory at 45.8 to 52.6 C, the switch 58 to 61, the SFP+ cages' PHY 60.0 to 63.2 and the module's PHY 49.1 to 53.3. Not yet under load on the ports."
+        ],
         "how": "The coprocessor's GPIO 48, the CPLD_INT_L pin, which the vendor's 1US startup script in its GPL sources drives low on assemblies AMDA0202-0001 and -0002 (the 2100 and 2300) for the CPLD's low fan speed mode, and leaves to the baseboard's pull-up on every other one. Driven low, the lower curve; given back as an input, the board's standard one.",
         "measured": "XGS 3300 (AMDA0202-0004, CPLD 05.00.08), 2026-10-30: standard 6,900-7,200 rpm at rest, 13,200-13,500 held for two minutes under full load on every host core with the CPU at its 100 C limit; quiet 5,400-5,700 at rest and 8,100 after a 3 s burst; either change within 5 s, and the line given back restores the standard curve within 10 s. The CPLD's bank on both faces read the same in either curve: no register reports or sets it."
       }

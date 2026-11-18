@@ -38,7 +38,7 @@ Tested on OPNsense 26.7.4_1 / FreeBSD 15.1-RELEASE-p3, on one machine: an ex-Sop
 with a Nuvoton NCT6779D. Everything below marked **measured here** was measured on that machine.
 Everything else comes from primary sources and is marked where it matters. On 2026-10-31 it runs on OPNsense 26.7.8_1 on the first XGS 3300.
 
-<p align="center"><b>Contents:</b> <a href="#what-it-does">What it does</a> &middot; <a href="#what-it-refuses-to-do-and-why-that-is-the-point">What it refuses to do, and why that is the point</a> &middot; <a href="#the-safety-contract">The safety contract</a> &middot; <a href="#two-things-worth-knowing-about-this-class-of-hardware">Two things worth knowing about this class of hardware</a> &middot; <a href="#installing-it">Installing it</a> &middot; <a href="#putting-it-on-an-appliance-it-has-never-seen">Putting it on an appliance it has never seen</a> &middot; <a href="#where-the-details-are">Where the details are</a> &middot; <a href="#in-the-xgs-image">In the XGS image</a> &middot; <a href="#in-arabic">In Arabic</a> &middot; <a href="#updates">Updates</a> &middot; <a href="#licence">Licence</a></p>
+<p align="center"><b>Contents:</b> <a href="#what-it-does">What it does</a> &middot; <a href="#what-it-refuses-to-do-and-why-that-is-the-point">What it refuses to do, and why that is the point</a> &middot; <a href="#the-safety-contract">The safety contract</a> &middot; <a href="#the-board-curves-return-to-the-standard-curve">The board curve's return to the standard curve</a> &middot; <a href="#two-things-worth-knowing-about-this-class-of-hardware">Two things worth knowing about this class of hardware</a> &middot; <a href="#installing-it">Installing it</a> &middot; <a href="#putting-it-on-an-appliance-it-has-never-seen">Putting it on an appliance it has never seen</a> &middot; <a href="#where-the-details-are">Where the details are</a> &middot; <a href="#in-the-xgs-image">In the XGS image</a> &middot; <a href="#in-arabic">In Arabic</a> &middot; <a href="#updates">Updates</a> &middot; <a href="#licence">Licence</a></p>
 
 ## What it does
 
@@ -64,12 +64,21 @@ Everything else comes from primary sources and is marked where it matters. On 20
   still rising with heat (8,100 after a three-second burst on every core), the coprocessor about
   5 C warmer at rest (76.5 against 70-72 C). It is set again within a minute whenever the
   coprocessor restarts - measured across a reboot: three minutes after it, when the coprocessor's
-  link was up - and gives way to the standard curve while the coprocessor reads 85 C or more,
-  until it is below 78 C. The board's fans are read again from the CPLD on every refresh of the
-  page, so its cards show the speed of that second, one card a fan, and the bar's top is the
-  measured 13,500. Where the coprocessor's memory module
-  has a temperature sensor, os-xgs-npu's driver holds that reading too, and it is listed as a
-  memory module.
+  link was up - and gives way to the standard curve while the coprocessor, its memory or a port
+  PHY is too warm ([below](#the-board-curves-return-to-the-standard-curve)); a reading that
+  cannot be taken changes nothing. The board's fans are read again from
+  the CPLD on every refresh of the page, so its cards show the speed of that second, one card a
+  fan, and the bar's top is the measured 13,500. Where the coprocessor's memory module has a
+  temperature sensor, os-xgs-npu's driver holds that reading too, and it is listed as a memory
+  module; so are its port chips - the switch, the SFP+ cages' PHY and an expansion module's
+  PHY - listed as port PHYs. The page gives the memory a card, and since 2026-11-17 the hottest of
+  the port PHYs one, each with the record's lowest, mean and highest over the window chosen, and
+  the dashboard panel gives their two lines the last day's; memory modules and port PHYs are
+  offered as temperatures to follow wherever a machine reports them, and followed by the fan curve
+  only when chosen - the board curve's return to the standard curve counts them on this board
+  whatever is chosen. The record's figures for them are kept while Enabled is on, by the plugin's
+  own sampler; with Enabled off the minute's record keeps the processor's and the board's sensors
+  only, and these cards show the reading without its figures.
 - **Keeps a record**, once a minute, of every sensor and every fan: the lowest, the highest and
   the time-weighted mean over the last hour, day, week and month, and how long each sensor spent
   above each rung of a fixed ladder. One sample costs 1.4 ms and the whole record is bounded at
@@ -128,6 +137,49 @@ watchdog, a sensor going quiet, a fan stalling, a read-back disagreeing, the pan
 and package removal. Where a restore itself fails, the plugin says so in four places at once and
 tells you the only thing that helps: **power the appliance off and on — a warm reboot does not
 necessarily clear a fan register.**
+
+## The board curve's return to the standard curve
+
+On a board that drives its fans itself - the AMDA0202 board of the XGS 2100, 2300, 3100 and 3300 -
+**Board fan curve** chooses the quiet curve, and the plugin gives way to the board's standard one
+while any reading below is at or above its hot figure, until every reading that holds it is below
+its cool figure. Until 2026-11-17 the coprocessor's die was the only one.
+
+| reading | hot | cool | where the figure comes from |
+|---|---|---|---|
+| coprocessor | 85 C | 78 C | its die, as the CPLD reads it. The plugin's own since 1.1.6 and not a part limit: the CN8365's is not public. |
+| memory | 80 C | 75 C | the coprocessor's DDR4 module, by its own JEDEC sensor where it has one. Five degrees under the 85 C its DRAM is held to in the normal range - 95 C only with its refresh doubled, which is not known of the coprocessor's memory controller (SK hynix H5AN8G4/8G8/8G6NCJR datasheet Rev 1.4, p.12; Micron MTA16ATF1G64HZ datasheet Rev F, Table 12). The sensor's own tolerance is 1 C from 75 to 95 C and 2 C from 40 to 125 C (Renesas TSE2004GB2B0 datasheet, p.7), and how far it reads from the DRAM nobody has measured. |
+| port PHYs | 95 C | 88 C | the hottest of the switch (88E6193X), the SFP+ cages' PHY (88X5113) and an expansion module's PHY - an 88X5113 too on the 4x10G module AMDA0207-0001, and not known on any other module. Ten degrees under the 88X5113's 105 C maximum junction (Marvell MV-S110852-U0 Rev C, Table 61), and five under the 100 C Linux sets as the alarm of the switch family's PHY sensor, a driver's default; the switch's own limit is not public. Nor is it settled which of the switch's registers holds its temperature: the value os-xgs-npu holds for it is read from page 6, register 28, where Linux reads that family's PHY temperature at register 27 and keeps 28 for the alarm. |
+
+The figures are the hardware table's (`fans.json`, `board_curve`), and the settings help says them.
+At rest they were measured on the second XGS 3300 from 2026-10-27 to 2026-11-17: the memory at
+45.8 to 52.6 C, the switch at 58 to 61, the SFP+ cages' PHY at 60.0 to 63.2 and the module's PHY at
+49.1 to 53.3. Under load on 2026-11-17 - the Quiet curve, TCP at line rate for 30 minutes in at F2
+and out of Port8 to the XGS 136, twice (09:12-09:42 and 12:38-13:08 UTC) - the highest readings were
+the coprocessor 83.5 and 84.6 C, the memory 54.9 and 55.2, the SFP+ cages' PHY 68.1 and 69.9, the
+switch 64.1 both times and the module's PHY 50.5 and 50.1. Each stayed under its figure above, so
+the quiet curve stayed on in every reading. The second run, photographed:
+[load-2026-11-17.png](docs/images/measurements/load-2026-11-17.png).
+
+**A reading that cannot be taken changes nothing**, as it changed nothing while the coprocessor's
+was the only one (1.1.8): it neither starts the return to the standard curve nor ends it. It is left
+out until it is read again, unless it held the standard curve at the last check: then it holds it
+still, until it is read again below its cool figure, or until Standard is chosen or Enabled turned
+off, which ends any hold. So a failed read no longer holds the standard curve: os-xgs-npu reads the
+port chips every four minutes and its driver drops a value five minutes old, so one failed read
+empties their nodes for minutes, and a memory module that answers one read with an error is not
+read again until the next boot. The memory and the port PHYs are read from
+os-xgs-npu's driver (`dev.octep.0.temperature.memory`, `.switch`, `.sfp_phy` and `.module_phy`),
+which it fills every minute and every four minutes; the coprocessor from the CPLD, as before.
+
+**On the XGS 2100 and 2300 none of this acts.** Their coprocessor drives GPIO 48 low itself - the
+vendor's startup script in its GPL sources does, on assemblies AMDA0202-0001 and -0002 - so the
+lower curve is their board's own, and the plugin, which undoes only what it set, leaves the line low:
+neither Standard nor a hot reading brings the standard curve back there. Once the plugin has read
+the line - with Quiet chosen, or after it - the Hardware tab and `fanctl.py board-curve` say the
+curve it gives, the quiet one, where until 2026-11-17 they said the standard curve; with Standard
+chosen from the start the line is never read, and the tab names the setting. Neither model is in
+this project's lab, so this is read from those sources and the plugin's own code, not measured.
 
 ## Two things worth knowing about this class of hardware
 

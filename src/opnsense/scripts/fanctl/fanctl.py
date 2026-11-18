@@ -892,13 +892,44 @@ def cpld_tach():
 # Reconciled, not set once: the coprocessor lets go of the line whenever it restarts - with the host,
 # or taken up again in place - so cron asks every minute, and Apply at once. Only what this plugin set
 # is undone: the line's state before the first change is kept, so a 2100 or 2300, whose coprocessor
-# drives it low itself, stays low when the setting goes back to standard. And the quiet curve gives
-# way to the standard one while the coprocessor reads npu_hot_c or more, until it is below npu_cool_c:
-# the lower curve is the vendor's choice for the 2xxx series, and on a 3xxx it has been watched for
-# minutes, not under a long load.
+# drives it low itself, stays low when the setting goes back to standard - and while a reading below
+# holds the standard curve, which therefore does not act there: the document and the page say the
+# curve the line gives (gpio), the quiet one. And the quiet curve gives way to the standard one while
+# it is too warm, below: the lower curve is the vendor's choice for the 2xxx series, and on a 3xxx it
+# has been watched for minutes, not under a long load.
+#
+# THE RETURN TO THE STANDARD CURVE (2026-11-17). The quiet curve gives way while any reading below
+# is at or above its hot figure, and comes back once every reading that holds it is read below its
+# cool figure:
+#
+#   the coprocessor's die, as the CPLD reads it        npu_hot_c, npu_cool_c         85, 78
+#   the coprocessor's memory module, where it has a    memory_hot_c, memory_cool_c   80, 75
+#     sensor (os-xgs-npu's dev.octep.N.temperature.memory)
+#   each port PHY os-xgs-npu's driver holds - the      phy_hot_c, phy_cool_c         95, 88
+#     switch, the SFP+ cages' PHY and an expansion
+#     module's (.switch, .sfp_phy, .module_phy) - so
+#     the hottest of them
+#
+# The figures are the table's (fans.json, board_curve), with where each comes from beside them;
+# these are the same, for a table that gives none. In short: the memory's hot figure is five degrees
+# under the 85 C a DDR4 module's DRAM is held to in its normal range, and the PHYs' ten under the one
+# published limit among them, the 88X5113's 105 C junction. Neither has been measured under load on
+# the ports yet.
+#
+# A READING THAT CANNOT BE TAKEN CHANGES NOTHING, as it changed nothing while the coprocessor's was
+# the only one (1.1.8): it neither starts a hold nor ends one. One not read now - a node os-xgs-npu's
+# driver has emptied, the driver or sysctl not answering, the CPLD not read - is left out until it is
+# read again, unless it held the standard curve at the last check: then it holds it still, until it
+# is read again below its cool figure, or until Standard is asked for, which ends any hold. Which
+# readings hold it is kept with the hold (held_for, in BOARD_CURVE), and outlives a reboot as the
+# hold does. So a failed read no longer holds the standard curve: os-xgs-npu's feeder reads the port
+# chips every four minutes and its driver drops a value five minutes old, so one failed read empties
+# those nodes for minutes, and a memory module that answers one read with an error is not read again
+# that boot (its temperatures.sh).
 NPU_RUN = '/usr/local/opnsense/scripts/xgs/npu-run.sh'
 CPLD_SENSORS = '/usr/local/sbin/xgs3300-sensors'
 BOARD_CURVE = os.path.join(STATE_DIR, 'board-curve.json')
+BOARD_LIMITS = (('npu', 85.0, 78.0), ('memory', 80.0, 75.0), ('phy', 95.0, 88.0))
 
 
 def _npu_run(command, seconds=20):
@@ -936,6 +967,69 @@ def _npu_celsius():
         return None
 
 
+def board_limits(spec):
+    """{'npu' | 'memory' | 'phy': (hot, cool)} from a board_curve block, BOARD_LIMITS for a figure it
+    does not give; None when one does not read as a number, or a cool figure is not below its hot one
+    - a curve held for ever, or one that comes back while it is still hot."""
+    limits = {}
+    for kind, hot, cool in BOARD_LIMITS:
+        try:
+            pair = (float(spec.get('%s_hot_c' % kind, hot)), float(spec.get('%s_cool_c' % kind, cool)))
+        except (TypeError, ValueError):
+            return None
+        if not pair[1] < pair[0]:
+            return None
+        limits[kind] = pair
+    return limits
+
+
+def _board_readings():
+    """[(name, kind, label, celsius)] the return rule reads: the coprocessor from the CPLD, as the
+    board curve always has, then the memory and each port PHY os-xgs-npu's driver holds, under the
+    names the page's cards and the record give them."""
+    readings = [('cpld.npu_c', 'npu', 'the coprocessor', _npu_celsius())]
+    for entry in sensors.read_held():
+        kind = {'dimm': 'memory', 'phy': 'phy'}.get(entry.get('kind'))
+        if kind:
+            readings.append((entry['name'], kind, entry.get('label') or entry['name'],
+                             entry.get('celsius')))
+    return readings
+
+
+def board_inputs(limits, holding=()):
+    """Each reading the return rule follows, with its figures and where it stands against them.
+
+    `state` is 'hot' (at or above its hot figure), 'warm' (at or above its cool one), 'cool' or
+    'unread' (no value now). `holding` is the hold's own list of the readings that held the standard
+    curve at the last check, {'name', 'kind', 'label'} each: one of them that is not listed at all now
+    - os-xgs-npu's driver gone, sysctl not answering - is an input still, unread, so that where it
+    stood can stand (board_curve())."""
+    found = {}
+    for name, kind, label, celsius in _board_readings():
+        found[name] = (kind, label, celsius)
+    for item in holding:
+        name = item.get('name')
+        if isinstance(name, str) and name not in found:
+            found[name] = (item.get('kind'), item.get('label') or name, None)
+
+    inputs = []
+    for name, (kind, label, celsius) in found.items():
+        if kind not in limits:
+            continue
+        hot, cool = limits[kind]
+        if celsius is None:
+            state = 'unread'
+        else:
+            state = 'hot' if celsius >= hot else 'warm' if celsius >= cool else 'cool'
+        inputs.append({'name': name, 'kind': kind, 'label': label, 'celsius': celsius,
+                       'hot_c': hot, 'cool_c': cool, 'state': state})
+    return inputs
+
+
+def _board_why(item):
+    return '%s reads %.1f C, at or above %.0f C' % (item['label'], item['celsius'], item['hot_c'])
+
+
 def board_curve():
     """Bring the board's own curve to the one the settings ask for, where the table says the board has
     two; a document for the page and for whoever ran it."""
@@ -945,34 +1039,69 @@ def board_curve():
         return {'status': 'ok', 'available': False, 'model': key}
     try:
         line = int(spec.get('line', 48))
-        hot = float(spec.get('npu_hot_c', 85))
-        cool = float(spec.get('npu_cool_c', 78))
     except (TypeError, ValueError):
+        line = None
+    limits = board_limits(spec)
+    if line is None or limits is None:
         return {'status': 'failed', 'available': True, 'model': key, 'detail': "the table's board_curve block does not read"}
     options = settings()
     asked = 'quiet' if options['enabled'] and options['board_curve'] == 'quiet' else 'standard'
     state = read_json(BOARD_CURVE, {}) or {}
-    held = bool(state.get('held_by_heat'))
-    npu = _npu_celsius()
+    # 'held_by_heat' is the key a state written before 2026-11-17 carries, when only the coprocessor's
+    # heat could hold the standard curve: a hold of that state is the coprocessor's.
+    held = bool(state.get('held', state.get('held_by_heat')))
+    if not held:
+        holding = []
+    elif isinstance(state.get('held_for'), list):
+        holding = [item for item in state['held_for'] if isinstance(item, dict)]
+    else:
+        holding = [{'name': 'cpld.npu_c', 'kind': 'npu', 'label': 'the coprocessor'}]
+    inputs = board_inputs(limits, holding)
+    # A reading not read now changes nothing: it starts no hold, and one that held the standard curve
+    # at the last check holds it still - where it stood when it was last read.
+    held_last = [item.get('name') for item in holding]
+    starts = [item for item in inputs if item['state'] == 'hot']
+    keeps = [item for item in inputs if item['state'] in ('hot', 'warm')
+             or (item['state'] == 'unread' and item['name'] in held_last)]
     if asked == 'quiet':
-        if npu is not None and npu >= hot and not held:
+        if starts and not held:
             held = True
-            log('board curve: the coprocessor reads %.1f C - the standard curve until it is below %.0f C'
-                % (npu, cool), syslog.LOG_WARNING)
-        elif held and npu is not None and npu < cool:
+            log('board curve: %s - the standard curve until every reading that holds it is read below '
+                'its cool figure (the coprocessor %.0f C, its memory %.0f C, a port PHY %.0f C)'
+                % ('; '.join(_board_why(item) for item in starts), limits['npu'][1],
+                   limits['memory'][1], limits['phy'][1]), syslog.LOG_WARNING)
+        elif held and not keeps:
             held = False
-            log('board curve: the coprocessor reads %.1f C - the quiet curve again' % npu)
+            log('board curve: %s - the quiet curve again'
+                % ', '.join('%s %.1f C' % (item['label'], item['celsius']) for item in inputs
+                            if item['celsius'] is not None))
     else:
         held = False
+    # What holds the standard curve now, one entry a reading, and why: its own state - 'hot', 'warm'
+    # (not yet below its cool figure) or 'unread' (holding at the last check, and not read since).
+    # Nothing that moves every minute, so the state is written when a reason changes and not with
+    # every reading.
+    held_for = [{'name': item['name'], 'kind': item['kind'], 'label': item['label'],
+                 'why': item['state']} for item in keeps] if held else []
     want = 'quiet' if asked == 'quiet' and not held else 'standard'
+    npu = next((item['celsius'] for item in inputs if item['kind'] == 'npu'), None)
     document = {'status': 'ok', 'available': True, 'model': key, 'asked': asked, 'running': want,
-                'held_by_heat': held, 'npu_c': npu, 'line': line}
+                'held': held, 'held_for': held_for, 'npu_c': npu, 'inputs': inputs, 'line': line}
 
-    # Standard, and nothing of this plugin's to undo: the coprocessor is not even asked.
+    # Kept before the coprocessor is asked anything. It was kept after, and a coprocessor that did not
+    # answer - restarting, which empties its memory's and its port chips' nodes too - lost the hold,
+    # and the next minute found it and said it again.
+    if state.get('held') != held or state.get('held_for', []) != held_for or 'held_by_heat' in state:
+        state.pop('held_by_heat', None)
+        state.update({'held': held, 'held_for': held_for})
+        write_json(BOARD_CURVE, state)
+
+    # Standard, and nothing of this plugin's to undo: the coprocessor is not even asked. A line it
+    # left low when it went back to standard - a board whose coprocessor drives it low itself, a 2100
+    # or 2300 - is low still, and the quiet curve is the one that runs.
     if want == 'standard' and state.get('set') != 'quiet':
-        if state.get('held_by_heat') != held:
-            state['held_by_heat'] = held
-            write_json(BOARD_CURVE, state)
+        if state.get('gpio') == 'output':
+            document['running'] = 'quiet'
         return document
 
     now = _board_line(line)
@@ -999,10 +1128,16 @@ def board_curve():
                 document.update({'status': 'failed', 'detail': 'GPIO %d was not given back' % line})
                 return document
             log("board curve: standard - the coprocessor's GPIO %d given back to the board" % line)
+        elif now == 'output' and state.get('set') == 'quiet':
+            log("board curve: standard - the coprocessor's GPIO %d left low, as it was before this plugin "
+                "drove it, so this board's quiet curve runs" % line)
         state['set'] = 'standard'
-    state.update({'held_by_heat': held, 'at': int(time.time())})
+    state['at'] = int(time.time())
+    state['gpio'] = now
     write_json(BOARD_CURVE, state)
-    document['gpio'] = now
+    # The curve the line gives, which is the one asked for except on a board whose coprocessor drives
+    # the line low itself: there neither Standard nor a hold raises it.
+    document.update({'gpio': now, 'running': 'quiet' if now == 'output' else 'standard'})
     return document
 
 
@@ -1038,8 +1173,15 @@ def board_curve_status(entry=None, options=None):
         return {'available': False}
     options = options if options is not None else settings()
     state = read_json(BOARD_CURVE, {}) or {}
+    held_for = state.get('held_for')
+    # The line as the last reconcile that asked the coprocessor left it, 'output' (driven low, the
+    # quiet curve) or 'input'; None where none has asked since 2026-11-17.
+    gpio = state.get('gpio')
     return {'available': True, 'setting': options['board_curve'], 'enabled': options['enabled'],
-            'set': state.get('set') or 'untouched', 'held_by_heat': bool(state.get('held_by_heat')),
+            'set': state.get('set') or 'untouched',
+            'held': bool(state.get('held', state.get('held_by_heat'))),
+            'held_for': held_for if isinstance(held_for, list) else [],
+            'gpio': gpio if gpio in ('output', 'input') else None,
             'at': state.get('at')}
 
 

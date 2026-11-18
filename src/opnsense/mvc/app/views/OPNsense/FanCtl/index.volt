@@ -358,8 +358,53 @@
         let show_silent = false;
         /* The processor's cores, one row until asked for: on most of these machines every core
            reads the same number, and eight identical bars said nothing the hottest one did not. */
-        /* which folded groups of sensors are open, by kind - see FOLD in draw_rows() */
+        /* which folded groups of sensors are open, by kind - see FOLD */
         const show_fold = {};
+
+        /* Sensors of one kind as one card - the hottest, the list being sorted hottest first - and
+           the rest behind a toggle, where there are enough of them to be worth folding. The
+           processor's cores were the only kind folded, and the XGS 136, which also reports its
+           coprocessor's four cores and the PHY behind each of twelve ports, drew thirty cards
+           where the XGS 3300 draws six.
+
+           `at` is how many make a fold. Three cores of a processor or of the coprocessor, which on
+           these machines mostly read alike. Two port PHYs or memory modules, since 2026-11-17,
+           because the card a fold draws is the hottest of the kind with its own record under it -
+           the lowest, the mean and the highest of the window - and that is the card these two are
+           read for: an XGS 3300 without an expansion module has two PHYs, and drew a card for each
+           and none that said which was the hotter. `hottest` names such a card for what it is;
+           `title` is the name a fold of cores keeps, with its count. */
+        const FOLD = {
+            cpu_core: {at: 3, title: "{{ lang._('processor cores') }}"},
+            npu_core: {at: 3, title: "{{ lang._('coprocessor cores') }}"},
+            phy: {at: 2, hottest: "{{ lang._('hottest of {n} port PHYs') }}"},
+            dimm: {at: 2, hottest: "{{ lang._('hottest of {n} memory modules') }}"}
+        };
+
+        /* {kind: how many} for each kind that folds in this reading: its sensors not proved
+           constant, when there are at least FOLD[kind].at of them. */
+        function fold_counts(sensors, constant) {
+            const members = {};
+            sensors.forEach(function (sensor) {
+                const kind = String(sensor.kind);
+                if (FOLD[kind] && constant.indexOf(String(sensor.name || '')) === -1) {
+                    members[kind] = (members[kind] || 0) + 1;
+                }
+            });
+            const counts = {};
+            Object.keys(members).forEach(function (kind) {
+                if (members[kind] >= FOLD[kind].at) {
+                    counts[kind] = members[kind];
+                }
+            });
+            return counts;
+        }
+
+        function fold_title(kind, count) {
+            const fold = FOLD[kind];
+            return fold.hottest ? fc_fill(fold.hottest, {n: fc_num(count)})
+                : fold.title + ' (' + count + ')';
+        }
 
         /* The incident that has been read. Keyed on the incident itself, so a NEW one appears
            even after an old one was dismissed. */
@@ -992,13 +1037,53 @@
             return (probe_doc && is_object(probe_doc.board_curve)) ? probe_doc.board_curve : {};
         }
 
-        function board_curve_name(board) {
-            if (!board.enabled || board.set !== 'quiet') {
-                return "{{ lang._('the standard curve') }}";
+        /* Why the standard curve holds where the quiet one was asked for, one sentence a kind of
+           reason (fanctl.py board_curve(), held_for): a reading at its hot figure, by kind; one not
+           yet below its cool figure; and one that held it and has not been read since. */
+        const board_held_title = {
+            npu: "{{ lang._('standard curve, held: coprocessor hot') }}",
+            memory: "{{ lang._('standard curve, held: coprocessor memory hot') }}",
+            phy: "{{ lang._('standard curve, held: port PHY hot') }}",
+            warm: "{{ lang._('standard curve, held: not yet below its cool figure') }}",
+            unread: "{{ lang._('standard curve, held: a temperature not read') }}"
+        };
+
+        /* Which curve runs, as [words, the sensors behind them] - one pair, or one a reason where the
+           quiet curve was asked for and the standard one holds. It was asked for whenever the plugin
+           is on and the setting says quiet: the reconcile writes 'standard' as the curve it set once
+           it has given the line back, so a hold read as the standard curve with no reason given
+           while the setting was not looked at. A hold kept from before its reasons were - a state
+           written by 1.1.8, which knew only the coprocessor's heat - is that reason. And the line
+           as the reconcile last read it, where it has, comes first: driven low is the quiet curve,
+           whatever was asked or held - an XGS 2100's or 2300's coprocessor drives it low itself,
+           and neither Standard nor a hold raises it there. */
+        function board_curve_names(board) {
+            if (board.gpio === 'output') {
+                return [["{{ lang._('quiet curve') }}", '']];
             }
-            return board.held_by_heat
-                ? "{{ lang._('the standard curve, held while the coprocessor is hot') }}"
-                : "{{ lang._('the quiet curve') }}";
+            if (!board.enabled || board.setting !== 'quiet' || !board.held) {
+                return [[board.enabled && board.setting === 'quiet' && board.set === 'quiet'
+                    ? "{{ lang._('quiet curve') }}" : "{{ lang._('standard curve') }}", '']];
+            }
+            const order = [];
+            const names = {};
+            ($.isArray(board.held_for) ? board.held_for : []).forEach(function (item) {
+                const key = item.why === 'hot' ? String(item.kind) : String(item.why);
+                if (board_held_title[key] === undefined) {
+                    return;
+                }
+                if (names[key] === undefined) {
+                    names[key] = [];
+                    order.push(key);
+                }
+                names[key].push(String(item.name || ''));
+            });
+            if (order.length === 0) {
+                return [[board_held_title.npu, '']];
+            }
+            return order.map(function (key) {
+                return [board_held_title[key], names[key].join(', ')];
+            });
         }
 
         /* The Settings tab on such a board: Board fan curve shown only where it does something,
@@ -1055,7 +1140,9 @@
                     : label("{{ lang._('the table does not permit control on this model') }}",
                         'label-default')));
             if (board.available) {
-                $control.append(' ').append(chip(board_curve_name(board), 'text-muted', ''));
+                board_curve_names(board).forEach(function (pair) {
+                    $control.append(' ').append(chip(pair[0], 'text-muted', pair[1]));
+                });
             }
             if (table.reason) {
                 $control.append(help_note(String(table.reason)));
@@ -1769,23 +1856,7 @@
 
             const seen_names = {};
             let frozen = 0;
-            /* Sensors of one kind as one card - the hottest, the list being sorted hottest first -
-               and the rest behind a toggle, where there are enough of them to be worth folding.
-               The processor's cores were the only kind folded, and the XGS 136, which also
-               reports its coprocessor's four cores and the PHY behind each of twelve ports, drew
-               thirty cards where the XGS 3300 draws six. */
-            const FOLD = {
-                cpu_core: "{{ lang._('processor cores') }}",
-                npu_core: "{{ lang._('coprocessor cores') }}",
-                phy: "{{ lang._('port PHYs') }}"
-            };
-            const members = {};
-            sensors.forEach(function (sensor) {
-                const kind = String(sensor.kind);
-                if (FOLD[kind] && constant.indexOf(String(sensor.name || '')) === -1) {
-                    members[kind] = (members[kind] || 0) + 1;
-                }
-            });
+            const folds = fold_counts(sensors, constant);
             const folded = {};
             sensors.forEach(function (sensor) {
                 const name = String(sensor.name || '');
@@ -1828,14 +1899,14 @@
                     card: true
                 };
                 const kind = String(sensor.kind);
-                if (FOLD[kind] && members[kind] >= 3) {
+                if (folds[kind]) {
                     if (!folded[kind]) {
                         /* the hottest of the kind stands for them all in one card, and the toggle
                            that opens the rest is in that card; the rest are a grid of their own
                            under the cards */
                         const open = !!show_fold[kind];
                         const $summary = row($.extend({}, one, {
-                            name: FOLD[kind] + ' (' + members[kind] + ')'
+                            name: fold_title(kind, folds[kind])
                         })).appendTo(temps.body);
                         $('<button type="button" class="fc-strip fc-card-toggle"/>')
                             .append($('<i class="fa fa-fw"/>').addClass(open ? 'fa-angle-up' : 'fa-angle-down'))
@@ -2388,9 +2459,37 @@
             'pch': "{{ lang._('chipset') }}",
             'acpi': "{{ lang._('ACPI thermal zones') }}",
             'nvme': "{{ lang._('drives') }}",
+            'nic': "{{ lang._('port PHYs and network controllers') }}",
+            'dimm': "{{ lang._('memory modules') }}",
             'npu': "{{ lang._('network coprocessor') }}",
             'inlet': "{{ lang._('inlet air') }}"
         };
+
+        /* The two groups that are offered only where this machine reports them, as
+           sensors.py suggested_groups() suggests them: a memory module's sensor, and a network
+           chip's - a port's PHY among them. Every other group is offered everywhere, and a group
+           this machine does not report is worth being able to choose and then being told about.
+           These two are not, because they are never a curve's only input: slow, like the
+           chipset, and offered beside the processor. On a machine with neither, a choice of one
+           could only ever fail the sensors line. One already saved is shown whatever the machine
+           reports, with the same note any other group gets. */
+        const FOUND_ONLY = ['nic', 'dimm'];
+
+        /* The words one group is offered with, or null where it is not offered: its title, and
+           the note where this machine does not report it. `present` is the document's list of
+           groups read now, or null before any document has said. */
+        function sensor_offer(key, present, saved) {
+            if (sensor_title[key] === undefined) {
+                return null;
+            }
+            if (present === null || present.indexOf(key) !== -1) {
+                return sensor_title[key];
+            }
+            if (!saved && FOUND_ONLY.indexOf(key) !== -1) {
+                return null;
+            }
+            return sensor_title[key] + ' ' + "{{ lang._('(not on this machine)') }}";
+        }
 
         /* The form is loaded only after the probe has answered, and that ordering is the whole
            reason this is a function rather than a block at the end of ready().
@@ -2456,28 +2555,34 @@
             });
         }
 
-        /* All four groups, always, whether or not this machine has them. A group this machine
-           does not report is worth being able to choose and then being told about: choosing it
-           fails the sensors line of the contract, with the group named, which is a better answer
-           than a list that quietly omitted it. */
+        /* Every group in sensor_title, whether or not this machine has it, except the two in
+           FOUND_ONLY, which are offered where it does. A group this machine does not report is
+           worth being able to choose and then being told about: choosing it fails the sensors
+           line of the contract, with the group named, which is a better answer than a list that
+           quietly omitted it. Which groups it reports comes from the live document, and from the
+           probe's where that has not arrived - the form is loaded in the probe's callback, so
+           one of the two is there - and with neither, no group is called absent. */
         function offer_sensors() {
             const $select = $('#fanctl\\.general\\.sensors');
             if ($select.length === 0) {
                 return;
             }
-            const present = (state_doc && is_object(state_doc.temperatures)
-                && $.isArray(state_doc.temperatures.present))
-                ? state_doc.temperatures.present : [];
+            const present_in = function (doc) {
+                return (doc && is_object(doc.temperatures) && $.isArray(doc.temperatures.present))
+                    ? doc.temperatures.present : null;
+            };
+            const present = present_in(state_doc) || present_in(probe_doc);
             $select.find('option').each(function () {
-                const key = $(this).val();
-                if (sensor_title[key] !== undefined) {
-                    $(this).text(sensor_title[key]);
+                const text = sensor_offer($(this).val(), present, true);
+                if (text !== null) {
+                    $(this).text(text);
                 }
             });
             Object.keys(sensor_title).forEach(function (key) {
-                add_option($select, key, sensor_title[key] + (
-                    present.indexOf(key) === -1
-                        ? ' ' + "{{ lang._('(not on this machine)') }}" : ''));
+                const text = sensor_offer(key, present, false);
+                if (text !== null) {
+                    add_option($select, key, text);
+                }
             });
         }
 

@@ -328,7 +328,11 @@ The page has three tabs under the strip of vital readings. **Readings** is the r
 temperatures as a grid of cards - each one the name over its sensor, the reading large and in the
 theme's warning colour at the limit and its danger colour past the panic point, a short band, and
 the window's lowest, mean and highest - with the processor cores as one card that opens a grid of
-its own; the fans and the load as rows. **Settings**
+its own, and the coprocessor's cores likewise, from three of a kind; the port PHYs and the memory
+modules fold from two, into a card named as the hottest of them, with its own record, because the
+hottest PHY and the memory are the cards those two are read for (2026-11-17). The dashboard widget
+folds them the same way and gives those two lines the record's three figures over the last day.
+The fans and the load are rows. **Settings**
 is OPNsense's own form with the form's own **Apply**, which saves and restarts the controller
 (~~a "Save and apply" button that followed the reader down the form~~ until 2026-10-17: the form
 is short with full help off, and OPNsense's forms keep their button at the end). **Hardware** is

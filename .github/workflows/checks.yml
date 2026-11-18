@@ -56,7 +56,9 @@ jobs:
 
       # The groups an owner can choose are one list in sensors.py, the model's mask and the page,
       # and a choice of any of them - npu and inlet included (os-fanctl #57) - is followed as
-      # written by the contract, the loop and `fanctl.py decide`. Synthetic readings only.
+      # written by the contract, the loop and `fanctl.py decide`; memory modules and network chips
+      # are suggested and offered where a machine reports them, and a default nowhere. Synthetic
+      # readings only; the page's offer runs in the runner's node.
       - name: Every sensor group can be chosen, and a choice is followed
         run: python3 tools/test-sensor-groups.py
 
@@ -66,6 +68,20 @@ jobs:
       # Synthetic readings only.
       - name: A setting left as shipped follows the table's groups
         run: python3 tools/test-default-sensors.py
+
+      # The AMDA0202 board's quiet curve gives way to its standard one while the coprocessor, its
+      # memory or a port PHY is at its hot figure, and comes back once every reading that holds it is
+      # below its cool figure; a reading that cannot be taken changes nothing. The figures are the
+      # table's, and the help and the README say the same. Synthetic readings, a stand-in for sysctl
+      # and the coprocessor's GPIO line, and the page's words for a hold in node.
+      - name: The board curve's return to the standard curve
+        run: python3 tools/test-board-curve.py
+
+      # One card for the memory and one for the hottest port PHY, each with the record's lowest,
+      # mean and highest: the page's fold and the widget's lines and ranges, run in the runner's
+      # node with readings and a record written in the test.
+      - name: The memory's card and the hottest port PHY's, on the page and the widget
+        run: python3 tools/test-readings-cards.py
 
   syntax:
     name: syntax

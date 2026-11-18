@@ -73,6 +73,10 @@ export default class FanCtl extends BaseTableWidget {
         this.speedHigh = {};
         this.speedAt = 0;
 
+        /* Each temperature's windows out of the same record, by sensor name: the memory's and the
+           hottest port PHY's lowest, mean and highest under their bars - see _record(). */
+        this.ranges = {};
+
         /* dataChanged() answers "is this the same document as last time", which is not the same
            question as "is the list still on the screen" - see _update(). */
         this.listed = false;
@@ -135,10 +139,13 @@ export default class FanCtl extends BaseTableWidget {
 
         if (Date.now() - this.speedAt > 60000) {
             try {
-                this.speedHigh = this._speedHigh(await this.ajaxCall('/api/fanctl/service/trend'));
+                const trend = await this.ajaxCall('/api/fanctl/service/trend');
+                this.speedHigh = this._speedHigh(trend);
+                this.ranges = this._ranges(trend);
                 this.speedAt = Date.now();
             } catch (error) {
-                /* No record is no scale beyond the reading itself; the speed is still drawn. */
+                /* No record is no scale beyond the reading itself and no range under a bar; the
+                   readings are still drawn. */
             }
         }
 
@@ -177,7 +184,8 @@ export default class FanCtl extends BaseTableWidget {
 
         /* A document identical to the last one still has to be drawn when the list is not on the
            screen - the first tick after a resize, or after an empty sweep emptied the table. */
-        const shape = {fans: fans, readings: readings, curve: status.curve || {}, speed: this.speedHigh};
+        const shape = {fans: fans, readings: readings, curve: status.curve || {}, speed: this.speedHigh,
+                       ranges: this.ranges};
         if (!this.dataChanged('fanctl-readings', shape) && this.listed) {
             return;
         }
@@ -223,25 +231,30 @@ export default class FanCtl extends BaseTableWidget {
 
         /* The processor's cores as one line, the hottest of them: eight identical bars made this
            widget the tallest thing on the dashboard and said nothing the hottest one does not.
-           The coprocessor's cores and the port PHYs likewise, as the page folds them, and its dies
-           and the Super I/O's inputs: on the XGS 136 they were 22 more lines - four cores, three
-           dies, three inputs and a PHY behind each of twelve ports - where the XGS 3300 has eight
-           lines in all. */
+           The coprocessor's cores likewise, as the page folds them, and its dies and the Super
+           I/O's inputs: on the XGS 136 they were 22 more lines - four cores, three dies, three
+           inputs and a PHY behind each of twelve ports - where the XGS 3300 has eight lines in
+           all. Three of a kind make a fold, and two of the port PHYs or the memory modules, as on
+           the page: their line is the hottest of them, named so, with its record under the bar
+           (_record()) - and an XGS 3300 without an expansion module has two PHYs. */
         const named = (key) => (count) => `${this.translations[key] || ''} (${this._format(count)})`;
+        const hottest = (key) => (count) => String(this.translations[key] || '%s').replace('%s', this._format(count));
         const fold = {
-            cpu_core: (count) => String(this.translations.cores || '%s').replace('%s', this._format(count)),
-            npu_core: named('npu_cores'),
-            npu_die: named('npu_dies'),
-            phy: named('phys'),
-            board_input: named('board_inputs')
+            cpu_core: [3, (count) => String(this.translations.cores || '%s').replace('%s', this._format(count))],
+            npu_core: [3, named('npu_cores')],
+            npu_die: [3, named('npu_dies')],
+            phy: [2, hottest('phys_hottest')],
+            dimm: [2, hottest('dimms_hottest')],
+            board_input: [3, named('board_inputs')]
         };
         let rows = sorted;
         Object.keys(fold).forEach((kind) => {
+            const [at, title] = fold[kind];
             const members = rows.filter((sensor) => String(sensor.kind) === kind);
-            if (members.length < 3) {
+            if (members.length < at) {
                 return;
             }
-            const lead = Object.assign({}, members[0], {label: fold[kind](members.length)});
+            const lead = Object.assign({}, members[0], {label: title(members.length)});
             rows = rows
                 .filter((sensor) => String(sensor.kind) !== kind || sensor === members[0])
                 .map((sensor) => (sensor === members[0] ? lead : sensor));
@@ -335,10 +348,43 @@ export default class FanCtl extends BaseTableWidget {
         const reading = `<span dir="ltr" class="${colour}">${this._escape(this._degrees(celsius))}</span>`;
 
         if (top === null) {
-            return [name, `<div style="display: flex; align-items: center; min-width: 0;">${reading}</div>`];
+            return [name, `<div style="display: flex; align-items: center; min-width: 0;">${reading}</div>${this._record(sensor)}`];
         }
 
-        return [name, this._measure(reading, tip, (celsius / top) * 100, mark, colour)];
+        return [name, this._measure(reading, tip, (celsius / top) * 100, mark, colour) + this._record(sensor)];
+    }
+
+    _record(sensor) {
+        /* The memory's line and the hottest port PHY's carry the record's lowest, mean and highest
+           under the bar: those of the last day, or of the last hour while the record has no day of
+           that sensor yet - the page's three figures, which are what these two are read for. The
+           tooltip says which three they are, and how little of the window was watched where that
+           is under all of it. Any other line, and a sensor the record has not got, has none. */
+        if (!['phy', 'dimm'].includes(String(sensor.kind))) {
+            return '';
+        }
+        const windows = this.ranges[sensor.name] || {};
+        const span = ['day', 'hour'].find((name) => {
+            const kept = windows[name];
+            return kept && Number(kept.seconds) > 0
+                && ['min', 'mean', 'max'].every((key) => kept[key] !== null && kept[key] !== undefined
+                    && Number.isFinite(Number(kept[key])));
+        });
+        if (!span) {
+            return '';
+        }
+        const kept = windows[span];
+        const figures = `${Number(kept.min).toFixed(1)} / ${Number(kept.mean).toFixed(1)} / ${Number(kept.max).toFixed(1)} °C`;
+        const text = String(this.translations[`range_${span}`] || '%s').replace('%s', this._isolate(figures));
+        let tip = String(this.translations.range_legend || '');
+        const watched = Number(kept.coverage);
+        if (Number.isFinite(watched) && watched < 0.99) {
+            tip += ` - ${String(this.translations.range_watched || '').replace('%s', `${Math.round(watched * 100)}%`)}`;
+        }
+
+        return `
+            <div class="text-muted fanctl-tip" data-toggle="tooltip" title="${this._escape(this._isolate(tip))}"
+                 style="font-size: 11px; text-align: end; white-space: nowrap;">${this._escape(text)}</div>`;
     }
 
     _silentRow(count) {
@@ -517,6 +563,19 @@ export default class FanCtl extends BaseTableWidget {
             });
         });
         return high;
+    }
+
+    _ranges(trend) {
+        /* Per temperature sensor, the windows the record holds of it (T|name), as history.py wrote
+           them: min, mean, max, seconds and coverage each. */
+        const ranges = {};
+        const series = (trend && trend.series) || {};
+        Object.keys(series).forEach((key) => {
+            if (key.indexOf('T|') === 0 && series[key] && series[key].windows) {
+                ranges[key.slice(2)] = series[key].windows;
+            }
+        });
+        return ranges;
     }
 
     _percent(value) {

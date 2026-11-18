@@ -51,10 +51,18 @@
                     these machines every core reads the same, and one bar per core made this the
                     tallest widget on the dashboard.
 
-        npu_cores,  The coprocessor's cores and dies, the port PHYs and the Super I/O's inputs,
-        npu_dies,   folded the same way where there are three or more of a kind, the count added
-        phys,       by the widget.
+        npu_cores,  The coprocessor's cores and dies and the Super I/O's inputs, folded the same
+        npu_dies,   way where there are three or more of a kind, the count added by the widget.
         board_inputs
+
+        phys_hottest,   The port PHYs and the memory modules, folded where there are two or more:
+        dimms_hottest   the line is the hottest of them, and says so, with how many there are.
+
+        range_day,      Under the memory's line and the hottest port PHY's, the record's lowest,
+        range_hour,     mean and highest of that sensor, over the last day - or the last hour while
+        range_legend,   the record holds no day of it yet; %s is the three figures. range_legend is
+        range_watched   the tooltip that says which three they are, and range_watched is added to it
+                        where the record watched less than the whole window, %s the share of it.
 
         speed_scale The tooltip of a fan drawn on its speed, where the board keeps its own curve
                     and no duty is known. The end of that bar is not the fan's maximum - nothing
@@ -87,8 +95,13 @@
             <cores>processor cores (%s)</cores>
             <npu_cores>coprocessor cores</npu_cores>
             <npu_dies>coprocessor dies</npu_dies>
-            <phys>port PHYs</phys>
             <board_inputs>board inputs</board_inputs>
+            <phys_hottest>hottest of %s port PHYs</phys_hottest>
+            <dimms_hottest>hottest of %s memory modules</dimms_hottest>
+            <range_day>last day %s</range_day>
+            <range_hour>last hour %s</range_hour>
+            <range_legend>lowest / mean / highest</range_legend>
+            <range_watched>%s of this window was watched</range_watched>
             <nodata>No fan or temperature readings yet.</nodata>
             <stale>The readings are from %s and are no longer being updated.</stale>
             <unreachable>Could not read the fan control status.</unreachable>

@@ -156,8 +156,11 @@ import time
 #          reason alone.
 #   board  hardware-monitor inputs: super-I/O, aibs, asmc, a BMC's SDRs.
 #          These are the ones whose physical attachment is unknown.
-#   nic    network controllers that publish a die temperature.
-#   dimm   memory modules (jedec_dimm and friends).
+#   nic    network chips that publish a temperature: a controller's die, and a
+#          port's PHY - the XGS appliances' switch and PHYs, through os-xgs-npu
+#          (_CLASSIFY) or the coprocessor's link (read_npu()).
+#   dimm   memory modules: jedec_dimm and friends, and the XGS 3300
+#          coprocessor's module where it has a sensor, through os-xgs-npu.
 #   npu    the network coprocessor of an XGS appliance: its die over the CPLD
 #          or octep, or its own thermal zones over its link (read_npu()).
 #   inlet  the chassis inlet air, where the CPLD publishes it (XGS 3300).
@@ -1634,6 +1637,52 @@ def read_npu():
     return list(entries)
 
 
+def read_held():
+    """os-xgs-npu's held readings and nothing else: on the XGS 3300 the coprocessor's memory and its
+    port chips beside the copies of the CPLD's two, on the XGS 136 the coprocessor's SoC.
+
+    For a caller that wants only these, every minute: fanctl.py's board curve, whose return to the
+    standard curve counts the memory and the port PHYs. discover() finds them by walking the whole
+    tree with `sysctl -aF` (67-195 ms, V); this lists the two drivers' own nodes with `sysctl -N`,
+    which prints names and runs no handler (history.py's discover_leaves()), and reads the ones
+    _HELD names in one more call - each answered from the driver's memory (os-xgs-npu,
+    contrib/octep/octep.c, octep_sysctl_temp()).
+
+    Every node the driver has is an entry, in the shape read() gives a sensor, and an empty one is
+    an entry with celsius None and unreadable 'absent': the driver refuses a value five minutes old
+    with ENOENT, so a feeder that stopped, a memory module with no sensor and a board with no
+    expansion module all look like that from here, and telling them apart is the caller's. Writes
+    nothing; never raises; a machine without either driver gets [].
+    """
+    names = []
+    for line in _run(['/sbin/sysctl', '-N', 'dev.octep', 'dev.npuep']).splitlines():
+        name = line.strip()
+        if _HELD.match(name) and name not in names:
+            names.append(name)
+    tree = _sysctl_values(names)
+    entries = []
+    for name in names:
+        celsius, units = parse_units(tree.get(name))
+        group, kind = _classify(name)
+        entry = {
+            'key': 'sysctl:%s' % name,
+            'name': name,
+            'source': 'sysctl',
+            'group': group,
+            'kind': kind,
+            'label': _label(name, kind),
+            'attached': _ATTACHED.get(kind, 'unknown'),
+            'named_by_driver': True,
+            'celsius': celsius,
+            'raw': tree.get(name),
+            'units': units if celsius is not None else None,
+        }
+        if celsius is None:
+            entry['unreadable'] = units
+        entries.append(entry)
+    return entries
+
+
 def read(catalogue=None, include_drives=False, include_superio=False,
          tracker=None):
     """Every temperature this machine reports, grouped, named and rated.
@@ -2180,7 +2229,24 @@ def suggested_groups(reading):
          slowness - it is the reading that notices heat that has had time to
          soak into the chassis - which makes it a good second and a poor
          first.
-      3. `board`, when there is one, it has been identified, AND it has been
+      3. `dimm`, when a memory module's own sensor answers, and
+      4. `nic`, when a network chip's does - a port's PHY, or a network
+         controller's die. Both are attached by construction: the sensor is
+         on the module, or in the die it reads. Both are parts the chassis
+         air cools, away from the processor, with a limit of their own: a
+         DDR4 module's DRAM is held to a case temperature of 85 C in its
+         normal range (D, SK hynix H5AN8G4/8G8/8G6NCJR datasheet Rev 1.4,
+         p.12; Micron MTA16ATF1G64HZ datasheet Rev F, Table 12), and the
+         88X5113 PHY behind the XGS 3300's SFP+ cages to a junction of
+         105 C (D, Marvell MV-S110852-U0 Rev C, Table 61). And both are
+         slow, as the chipset is, so they come after it and are never
+         followed alone. Suggested, never a default: MODEL_SENSORS and the
+         table name neither, and the page offers them only where this
+         machine reports them. Not suggested before 2026-11-17, when the
+         reason given here was that they do not describe what a chassis fan
+         can change - which the XGS 3300's coprocessor memory and port PHYs,
+         cooled by the same two fans as everything else in it, disprove.
+      5. `board`, when there is one, it has been identified, AND it has been
          seen to move. A super-I/O input whose `attached` is 'unknown' is not
          offered as a default no matter how sensible its number looks - and
          nor is one whose attachment the CHIP claims but which has never
@@ -2193,13 +2259,13 @@ def suggested_groups(reading):
          at something plausible instead of at zero. It costs a freshly booted
          machine one heat cycle before a live board input is RECOMMENDED; it
          never stops anybody selecting one.
-      4. `acpi`, last, and only when it has been seen to MOVE. On this board
+      6. `acpi`, last, and only when it has been seen to MOVE. On this board
          it is a constant; on a board where the firmware wired it to something
          it may be the only sensor there is.
 
-    `nvme`, `drive`, `nic` and `dimm` are never suggested. They are real
-    temperatures and they do not describe what a chassis fan can change; a
-    drive that is warm is warm because it is busy.
+    `nvme` and `drive` are never suggested. They are real temperatures and
+    they do not describe what a chassis fan can change; a drive that is warm
+    is warm because it is busy.
     """
     have = {}
     for sensor in reading.get('sensors', []):
@@ -2212,6 +2278,10 @@ def suggested_groups(reading):
         order.append(('cpu', 'on_die_and_fastest'))
     if 'pch' in have:
         order.append(('pch', 'slow_but_real'))
+    if 'dimm' in have:
+        order.append(('dimm', 'sensor_on_the_module'))
+    if 'nic' in have:
+        order.append(('nic', 'sensor_on_the_chip'))
     if any(s.get('attached') != 'unknown' and s.get('confidence') == 'measured'
            for s in have.get('board', [])):
         order.append(('board', 'identified_board_input'))
