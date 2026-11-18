@@ -47,6 +47,11 @@ and what is wanted in it is a measurement rather than a datasheet.
 Plugin Changelog
 ================
 
+1.1.9
+
+* Phase 1: memory and port PHY temperatures, and the board curve's return
+  with them
+
 1.1.8
 
 * the sensors setting as shipped (cpu,pch) is no longer taken for a
